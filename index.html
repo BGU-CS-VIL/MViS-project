@@ -1224,10 +1224,18 @@
   /* ================= Mobile and layout fixes ================= */
   /* the title always on two lines */
   .hero h1 .h1-line { display: block; white-space: nowrap; }
+  /* phones: the title on three lines (Video Stitching / from Multiple / Moving Cameras); computers keep two */
+  .h1-m3 { display: none !important; }
+  @media (max-width: 760px) { .h1-m { display: none; } .h1-m3 { display: inline !important; } .h1-line.h1-m3 { display: block !important; } }
   .tagline .tag-line { display: block; white-space: nowrap; }   /* the tagline always on two lines */
   /* the intro fills the screen, also as Safari's bars grow and shrink */
   .hero { min-height: 100vh; min-height: 100svh; }
-  @supports (height: 100lvh) { .hero { min-height: 100lvh; } }   /* the full screen, as if Safari's bars were hidden, so the intro always reaches the bottom */
+  @supports (height: 100lvh) { .hero { min-height: 100lvh; } }
+  /* phones and tablets: the script sets the intro to the full physical screen height, so it also covers the area under Safari's floating bars */
+  .hero.is-fullscreen { min-height: var(--hero-full); }
+  .hero.is-fullscreen .scroll-cue { bottom: var(--cue-bottom, 28px); }
+  .hero.is-fullscreen { padding-bottom: calc(var(--hero-extra, 0px) + 96px); }   /* keep the text centered in the visible part */
+  @media (max-aspect-ratio: 4/5) { .hero.is-fullscreen .hero-video { top: calc(50% - var(--hero-extra, 0px) / 2); } }   /* and the panorama too */
   /* carousel arrows on phones and tablets: small, beside the video, never over it (computers unchanged) */
   @media (max-width: 899px) {
     .nav-btn { width: 24px; height: 34px; margin-top: -17px; background: var(--yellow); color: var(--ink); box-shadow: 2px 2px 0 var(--ink); border-width: 1.5px; opacity: 0.92; }
@@ -1246,8 +1254,8 @@
   @media (max-width: 760px) {
     .hero { padding: 92px 16px 96px; }
     .hero-inner { width: 100%; margin-top: 4vh; }
-    .hero h1 { font-size: 8.3vw; font-stretch: 86%; line-height: 1.1; margin-bottom: 1.8rem; letter-spacing: -0.015em; }
-    .venue { top: 13vh; }
+    .hero h1 { font-size: 10vw; line-height: 1.08; margin-bottom: 1.8rem; letter-spacing: -0.02em; }
+    .venue { top: 10vh; }
     .hero .tagline { max-width: 19.5rem; margin-left: auto; margin-right: auto; font-size: 1.05rem; padding: 0; text-wrap: balance; }
     .tagline .tag-line { display: inline; white-space: normal; }   /* phones: the tagline wraps on three lines */
     .bench-caption { display: none; }
@@ -1290,7 +1298,7 @@
   <div class="hero-shade"></div>
   <p class="venue">NeurIPS 2026</p>
   <div class="hero-inner">
-    <h1><span class="h1-line">Video Stitching from</span> <span class="h1-line">Multiple Moving Cameras</span></h1>
+    <h1><span class="h1-line">Video Stitching <span class="h1-m">from</span></span> <span class="h1-line"><span class="h1-m3">from </span>Multiple <span class="h1-m">Moving Cameras</span></span><span class="h1-line h1-m3">Moving Cameras</span></h1>
     <ul class="authors">
       <li><a href="https://shiraif.github.io/" target="_blank" rel="noopener">Shira Ifergane</a></li>
       <li><a href="https://royamoyal.github.io/" target="_blank" rel="noopener">Roy Amoyal</a></li>
@@ -2048,6 +2056,29 @@
   }
 
   toArray(document.querySelectorAll('[data-gallery]')).forEach(initGallery);
+
+  // phones and tablets: the intro covers the whole physical screen, including the area under Safari's floating
+  // toolbar; the scroll arrow stays just above the visible bottom edge
+  (function () {
+    var h = document.querySelector('.hero');
+    if (!h || !(window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches)) return;
+    var lastW = 0;
+    function fit(force) {
+      var w = window.innerWidth;
+      if (!force && w === lastW) return;   // ignore the height changes while Safari's bars move
+      lastW = w;
+      var portrait = window.innerHeight >= window.innerWidth;
+      var screenH = portrait ? Math.max(screen.height, screen.width) : Math.min(screen.height, screen.width);
+      var full = Math.max(window.innerHeight, screenH || 0);
+      h.style.setProperty('--hero-full', full + 'px');
+      h.style.setProperty('--cue-bottom', (full - window.innerHeight + 28) + 'px');
+      h.style.setProperty('--hero-extra', (full - window.innerHeight) + 'px');
+      h.classList.add('is-fullscreen');
+    }
+    fit(true);
+    window.addEventListener('resize', function () { fit(false); });
+    window.addEventListener('orientationchange', function () { window.setTimeout(function () { fit(true); }, 250); });
+  })();
 
   // background video on the first screen: pause it when scrolled away
   var hero = document.querySelector('.hero');
