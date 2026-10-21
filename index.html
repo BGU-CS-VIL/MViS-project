@@ -1,0 +1,3526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="MViS: a lightweight test-time optimization framework for stitching videos from multiple freely moving cameras, and the MMCD multi-camera dataset.">
+<title>Video Stitching from Multiple Moving Cameras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..800&family=Kaushan+Script&display=swap" rel="stylesheet">
+<style>
+  /* Layout: a full-screen black hero with the looping volcano video, then full-bleed bands
+     (cream for the paper content, green for MMCD), each holding one centered reading column;
+     video carousels break out wider than the text. One fixed look, chosen by the authors, in every theme. */
+  :root {
+    --bg: #000000;
+    --cream: #F7F6F0;
+    --green: #D5E5BB;
+    --text: #1a1a1a;
+    --muted: #5d5a50;
+    --primary: #12296B;
+    --burgundy: #800020;
+    --border: #d9d4c4;
+    --panel: #e6e2d4;
+    --code-bg: #fdfcf9;
+    --button-bg: #e2ded1;
+    --button-hover: #d4cfbf;
+    --button-fg: #1a1a1a;
+    --dot: #c6c1b1;
+    --dot-active: #1a1a1a;
+    --focus: #12296B;
+    --shadow: rgba(0, 0, 0, 0.12);
+    --hero-fg: #ffffff;
+    --hero-fg-soft: rgba(255, 255, 255, 0.88);
+    --hero-accent: #9DC8FF;
+    --hero-line: rgba(255, 255, 255, 0.55);
+    --hero-shade-mid: rgba(0, 0, 0, 0.30);
+    --hero-shade-edge: rgba(0, 0, 0, 0.62);
+    --hero-text-shadow: rgba(0, 0, 0, 0.55);
+    --video-bg: #000000;
+    --placeholder-bg: #16181d;
+    --placeholder-fg: #b4b9c3;
+    --label-bg: rgba(255, 255, 255, 0.92);
+    --label-fg: #1a1a1a;
+    --overlay-btn-bg: rgba(255, 255, 255, 0.85);
+    --overlay-btn-fg: #1a1a1a;
+    --play-bg: rgba(0, 0, 0, 0.55);
+    --play-fg: #ffffff;
+
+    --font-serif: "Source Serif 4", "Source Serif Pro", Georgia, "Times New Roman", serif;
+    --font-sans: "Source Sans 3", "Source Sans Pro", "Helvetica Neue", Arial, sans-serif;
+    --font-head: var(--font-serif);
+    --font-body: var(--font-serif);
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+    --measure: 46rem;
+    --wide: 1000px;
+    color-scheme: light;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    scroll-snap-type: y proximity;     /* scrolling settles with a section title at the top when it is close */
+  }
+  .hero, main h2 { scroll-snap-align: start; }
+
+  /* sections come in as the reader reaches them: each block fades up once when it enters the screen
+     (only when the script runs; without it, or with reduced motion, everything is simply shown) */
+  .reveal-on .rv { opacity: 0; transform: translateY(26px); transition: opacity 0.7s ease, transform 0.7s ease; }
+  .reveal-on .rv.is-in { opacity: 1; transform: none; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.65;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, p, ol, dl, dd, figure { margin: 0; }
+  h1, h2, h3, .takeaway .statement { font-family: var(--font-head); }
+
+  var { font-style: italic; }
+  .m { white-space: nowrap; }
+
+  /* ---------- Bands ---------- */
+  .band {
+    padding-left: 30px;
+    padding-right: 30px;
+    padding-top: 8px;
+    padding-bottom: 96px;
+  }
+  .band-cream { background: var(--cream); }
+  .band-green {
+    background: var(--green);
+    /* same components, retuned for the green ground */
+    --muted: #1f3b29;
+    --border: rgba(16, 38, 26, 0.22);
+    --button-bg: #c0d59f;
+    --button-hover: #b2ca8b;
+    --dot: rgba(16, 38, 26, 0.30);
+  }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    min-height: 100svh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 120px 24px 112px;
+    background: var(--bg);
+    color: var(--hero-fg);
+    text-align: center;
+  }
+
+  .hero-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .hero-shade {
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    background: radial-gradient(ellipse at center, var(--hero-shade-edge) 0%, var(--hero-shade-mid) 55%, var(--hero-shade-edge) 100%);
+  }
+
+  .hero-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 1040px;
+    text-shadow: 0 2px 22px var(--hero-text-shadow);
+  }
+
+  .hero h1 {
+    margin-bottom: 1.5rem;
+    color: var(--hero-fg);
+    font-size: clamp(2.3rem, 6vw, 4.6rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .authors {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    color: var(--hero-fg-soft);
+    font-size: clamp(1.1rem, 2.2vw, 1.4rem);
+    line-height: 1.5;
+  }
+  .authors li {
+    display: inline-block;
+    margin: 0 0.55em;
+    white-space: nowrap;
+  }
+
+  .venue {
+    position: absolute;
+    top: 64px;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    max-width: none;
+    margin: 0;
+    padding: 0 20px;
+    text-align: center;
+    text-shadow: 0 2px 22px var(--hero-text-shadow);
+    color: var(--hero-fg);
+    font-size: clamp(1rem, 1.8vw, 1.2rem);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .tagline {
+    max-width: 36rem;
+    margin: 2rem auto 0;
+    color: var(--hero-fg);
+    font-size: clamp(1.1rem, 2.1vw, 1.38rem);
+    line-height: 1.5;
+    text-wrap: balance;
+  }
+  .tagline::before {
+    content: "";
+    display: block;
+    width: 56px;
+    height: 1px;
+    margin: 0 auto 1.4rem;
+    background: var(--hero-line);
+  }
+
+  .scroll-cue {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    z-index: 1;
+    width: 44px;
+    height: 44px;
+    margin-left: -22px;
+    border: 1px solid var(--hero-line);
+    border-radius: 50%;
+    color: var(--hero-fg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-animation: nudge 2.4s ease-in-out infinite;
+    animation: nudge 2.4s ease-in-out infinite;
+  }
+  .scroll-cue svg { width: 18px; height: 18px; }
+  .scroll-cue:focus { outline: 2px solid var(--hero-fg); outline-offset: 3px; }
+  @-webkit-keyframes nudge { 0%, 100% { -webkit-transform: translateY(0); } 50% { -webkit-transform: translateY(6px); } }
+  @keyframes nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+
+  /* ---------- Section navigation ---------- */
+  /* a slim bar fixed to the top; hidden over the hero, it slides in once the hero has scrolled away */
+  .topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: rgba(247, 246, 240, 0.94);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    -webkit-transform: translateY(-100%);
+    transform: translateY(-100%);
+    visibility: hidden;
+    transition: transform 0.3s ease, visibility 0s linear 0.3s;
+  }
+  .topbar.is-shown {
+    -webkit-transform: none;
+    transform: none;
+    visibility: visible;
+    transition: transform 0.3s ease, visibility 0s;
+  }
+  .topbar nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 28px;
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 9px 16px;
+    overflow-x: auto;
+  }
+  .topbar a {
+    padding: 4px 1px;
+    border-bottom: 2px solid transparent;
+    color: var(--primary);
+    font-family: var(--font-head);
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .topbar a:hover, .topbar a.is-active { border-bottom-color: var(--primary); }
+  .topbar-links { display: flex; align-items: center; gap: 24px; }
+  .topbar a.topbar-home { color: var(--text); font-weight: 400; }
+  .topbar a.topbar-home b { color: var(--primary); font-weight: 700; }
+  /* the dataset is the one colored item: rainbow letters with a drifting gradient (two periods, shifted by one, so it loops);
+     the section heading uses the same rainbow, in deeper shades for the green band */
+  .topbar a.nav-mmcd { font-weight: 700; }
+  .topbar a.nav-mmcd, .rainbow {
+    background-image: linear-gradient(90deg, #E5484D, #F5973B, #D9A400, #2FAE5F, #3F7FE0, #8E5BD8,
+                                             #E5484D, #F5973B, #D9A400, #2FAE5F, #3F7FE0, #8E5BD8, #E5484D);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    -webkit-animation: rainbow-drift 2s linear infinite;
+    animation: rainbow-drift 2s linear infinite;
+  }
+  @-webkit-keyframes rainbow-drift { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+  @keyframes rainbow-drift { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+  .band-green .rainbow {
+    background-image: linear-gradient(90deg, #C9302F, #D0661A, #9C7400, #1C7A3E, #2A5FC0, #6E3CB8,
+                                             #C9302F, #D0661A, #9C7400, #1C7A3E, #2A5FC0, #6E3CB8, #C9302F);
+  }
+  .topbar a:focus { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .topbar a:focus:not(:focus-visible) { outline: none; }
+  h2, .snap-h { scroll-margin-top: 64px; }
+  @media (max-width: 900px) {
+    .topbar-links { gap: 18px; }
+  }
+  @media (max-width: 700px) {
+    .nav-long { display: none; }
+  }
+  .nav-break { display: none; }
+  /* phones: a 16px gutter and slightly tighter tracking keep the longer section titles on one line, at full size */
+  @media (max-width: 480px) {
+    main .band { padding-left: 16px; padding-right: 16px; }
+    h2 { letter-spacing: -0.015em; }
+  }
+  @media (max-width: 380px) {
+    h2 { letter-spacing: -0.025em; }
+  }
+  /* phones: MViS beside two left-aligned rows of links (Background, Method, MMCD / MC Benchmark, GV, BibTeX) */
+  @media (max-width: 600px) {
+    .topbar nav { display: grid; grid-template-columns: auto auto; justify-content: center; align-items: start; column-gap: 48px; padding: 6px 10px 7px; overflow-x: visible; }
+    .topbar-links { flex-wrap: wrap; justify-content: flex-start; gap: 2px 18px; }
+    .nav-break { display: block; flex-basis: 100%; height: 0; }
+    .topbar a { padding: 3px 1px; font-size: 0.98rem; line-height: 1.3; }
+    h2, .snap-h { scroll-margin-top: 84px; }
+  }
+  @media (max-width: 350px) {
+    .topbar nav { column-gap: 32px; }
+    .topbar-links { gap: 2px 12px; }
+    .topbar a { font-size: 0.9rem; }
+  }
+
+  /* ---------- Results tables ---------- */
+  .table-wrap { max-width: var(--wide); margin: 22px auto 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.results {
+    margin: 0 auto;
+    border-collapse: collapse;
+    border-top: 1.5px solid var(--text);
+    border-bottom: 1.5px solid var(--text);
+    font-size: 0.9rem;
+    font-variant-numeric: lining-nums tabular-nums;
+    line-height: 1.35;
+  }
+  table.results th, table.results td { padding: 4px 9px; text-align: center; white-space: nowrap; }
+  table.results th { font-weight: 400; }
+  table.results thead th[rowspan] { vertical-align: bottom; padding-bottom: 6px; border-bottom: 1px solid var(--text); }
+  table.results thead tr:first-child th { padding-top: 7px; }
+  table.results thead tr:last-child th { padding-bottom: 6px; border-bottom: 1px solid var(--text); color: var(--muted); font-size: 0.85rem; }
+  table.results .method { text-align: left; }
+  table.results .g { padding-left: 20px; }
+  table.results .group td { padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; letter-spacing: 0.04em; text-align: left; }
+  table.results tbody tr:first-child td { padding-top: 7px; }
+  table.results tr.ours td { border-top: 1px solid var(--text); background: var(--panel); }
+  table.results tr.ours .method { font-weight: 700; }
+  table.results b { font-weight: 700; }
+
+  /* ---------- Headings and text ---------- */
+  h2 {
+    max-width: var(--measure);
+    margin: 72px auto 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--primary);
+    font-size: 2rem;
+    font-weight: 400;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+
+  h3 {
+    max-width: var(--measure);
+    margin: 64px auto 14px;
+    font-size: 1.5rem;
+    font-weight: 400;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
+  h2 + h3 { margin-top: 28px; }
+  h3 + h4 { margin-top: 18px; }
+  h4.mv-step-h { margin-top: 64px; font-size: 1.25rem; }   /* the Method's subsections, under its high-level overview */
+  h2#mmcd, h2#background, h2#benchmark, h2#gv, h2#more-results, h2#citation { font-weight: 700; }
+  h2#mvis { font-weight: 400; }
+  h2#mvis b { font-weight: 700; }
+
+  h4 {
+    max-width: var(--measure);
+    margin: 36px auto 8px;
+    font-size: 1.15rem;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+  }
+
+  p {
+    max-width: var(--measure);
+    margin: 0 auto 14px;
+    font-size: 1.06rem;
+  }
+
+  .contributions {
+    max-width: var(--measure);
+    margin: 0 auto;
+    padding-left: 1.6em;
+    font-size: 1.06rem;
+  }
+  .contributions li { padding-left: 0.3em; margin-bottom: 10px; }
+  .contributions li::marker { color: var(--primary); font-weight: 600; }
+  /* the key phrase of each contribution: a lighter title blue, underlined; the underlines draw in one after another
+     each time the list scrolls into view */
+  .contributions b {
+    color: #3A5BB8;
+    padding-bottom: 1px;
+    background-image: linear-gradient(#3A5BB8, #3A5BB8);
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 100% 1px;
+  }
+  .contributions.ul-wait b { background-size: 0% 1px; }
+  .contributions.ul-go b { transition: background-size 0.6s ease; }
+  .contributions.ul-go li:nth-child(2) b { transition-delay: 0.45s; }
+  .contributions.ul-go li:nth-child(3) b { transition-delay: 0.9s; }
+  .contributions.ul-go li:nth-child(4) b { transition-delay: 1.35s; }
+  .contributions.ul-go li:nth-child(5) b { transition-delay: 1.8s; }
+  .steps { max-width: var(--measure); margin: 0 auto 14px; padding-left: 1.6em; font-size: 1.06rem; }
+  .steps li { padding-left: 0.3em; margin-bottom: 6px; }
+  .steps li::marker { color: var(--primary); font-weight: 600; }
+
+  .caption {
+    max-width: var(--measure);
+    margin: 0 auto 30px;
+    color: var(--muted);
+    font-size: 0.95rem;
+    text-align: center;
+  }
+
+  /* ---------- Takeaway ---------- */
+  .takeaway {
+    max-width: var(--measure);
+    margin: 72px auto 0;
+    text-align: center;
+  }
+  .takeaway .eyebrow {
+    margin: 0 auto 12px;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .takeaway .statement {
+    margin: 0 auto;
+    color: #3A5BB8;   /* the light blue of the bold words in Contributions */
+    font-size: clamp(1.2rem, 2.3vw, 1.6rem);
+    font-weight: 700;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+
+  /* ---------- MMCD stats ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-gap: 12px;
+    gap: 12px;
+    max-width: var(--measure);
+    margin: 22px auto 22px;
+    padding: 18px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+  }
+  .stats > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .stats dd {
+    font-size: 2rem;
+    font-weight: 500;
+    line-height: 1.15;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+  .stats dt {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  .note { margin-top: 24px; }
+
+  /* ---------- Citation ---------- */
+  .cite-note {
+    color: var(--muted);
+    font-size: 1.12rem;
+  }
+  .bibtex {
+    position: relative;
+    max-width: var(--measure);
+    margin: 18px auto 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--code-bg);
+  }
+  .bibtex pre {
+    margin: 0;
+    padding: 20px 22px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.86rem;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre;
+    -webkit-overflow-scrolling: touch;
+  }
+  .copy-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--cream);
+    color: var(--primary);
+    font-family: var(--font-sans);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .copy-btn:hover { background: var(--panel); }
+  .copy-btn:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .copy-btn:focus:not(:focus-visible) { outline: none; }
+
+  /* ---------- Gallery / carousel ---------- */
+  /* the video is exactly as wide as the text column */
+  .gallery {
+    max-width: var(--measure);
+    margin: 18px auto 10px;
+  }
+
+  .gallery-stage {
+    position: relative;
+  }
+
+  .gallery-viewport {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    border-radius: 14px;
+    isolation: isolate;
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+    background: var(--video-bg);
+    aspect-ratio: 16 / 9;
+    touch-action: pan-y;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Safari < 15 has no aspect-ratio: reserve the height with padding instead */
+  @supports not (aspect-ratio: 1 / 1) {
+    .gallery-viewport::before {
+      content: "";
+      display: block;
+      padding-top: 56.25%;
+    }
+  }
+
+  .gallery-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    visibility: hidden;
+  }
+  .gallery-slide.is-active,
+  .gallery-slide.is-moving { visibility: visible; }
+
+  .gallery-slide video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: var(--video-bg);
+  }
+
+  .slide-label {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    z-index: 2;
+    padding: 4px 12px;
+    border-radius: 3px;
+    background: var(--label-bg);
+    color: var(--label-fg);
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+    box-shadow: 0 1px 4px var(--shadow);
+  }
+
+  .video-missing {
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: var(--placeholder-bg);
+    color: var(--placeholder-fg);
+    font-size: 0.92rem;
+    text-align: center;
+  }
+  .video-missing code {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    word-break: break-all;
+  }
+
+  .tap-play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 3;
+    width: 64px;
+    height: 64px;
+    margin: -32px 0 0 -32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--play-bg);
+    color: var(--play-fg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .tap-play svg { width: 26px; height: 26px; margin-left: 4px; }
+
+  .nav-btn {
+    position: absolute;
+    top: 50%;
+    z-index: 4;
+    width: 48px;
+    height: 48px;
+    margin-top: -24px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--button-bg);
+    color: var(--button-fg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px var(--shadow);
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    -webkit-appearance: none;
+    appearance: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav-btn svg { width: 20px; height: 20px; }
+  .nav-btn:hover { background: var(--button-hover); transform: scale(1.06); }
+  .nav-btn:active { transform: scale(0.97); }
+  /* arrows sit in the margin beside the video when there is room */
+  .nav-btn.prev { left: -64px; }
+  .nav-btn.next { right: -64px; }
+
+  .gallery-dots {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+  }
+  .dot {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dot::before {
+    content: "";
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--dot);
+    transition: background-color 0.2s ease, transform 0.2s ease;
+  }
+  .dot:hover::before { transform: scale(1.25); }
+  .dot.active::before { background: var(--dot-active); }
+
+  .gallery.is-single .gallery-dots { display: none; }
+  .gallery.is-single + .caption { margin-top: 12px; }
+
+  /* Visible keyboard focus everywhere; mouse clicks keep it quiet where the browser supports :focus-visible */
+  .gallery-viewport:focus,
+  .nav-btn:focus,
+  .dot:focus,
+  .tap-play:focus { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .gallery-viewport:focus:not(:focus-visible),
+  .nav-btn:focus:not(:focus-visible),
+  .dot:focus:not(:focus-visible),
+  .tap-play:focus:not(:focus-visible) { outline: none; }
+
+  /* ---------- Method figures ---------- */
+  /* Schematic illustrations on a synthetic scene; drawn by the "Method figures" script at the end of the page. */
+  .mv-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .mv-fig { max-width: var(--measure); margin: 22px auto 10px; }
+  .mv-img { display: block; width: 100%; height: auto; border-radius: 4px; }
+  .mv-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .mv-play {
+    flex: none;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--button-bg);
+    color: var(--button-fg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .mv-play:hover { background: var(--button-hover); }
+  .mv-play svg { width: 16px; height: 16px; }
+  .mv-range { flex: 1; min-width: 0; margin: 0; border-radius: 4px; accent-color: var(--primary); }
+  .mv-readout, .mv-end { color: var(--muted); font-size: 0.92rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mv-readout { min-width: 3.6em; text-align: right; }
+  .mv-nw { white-space: nowrap; }
+  .mv-ss { display: inline-flex; flex-direction: column; vertical-align: 0.48em; margin-left: 1px; font-size: 0.72em; line-height: 1.05; text-align: left; }
+  .mv-label { display: block; margin-top: 3px; color: var(--muted); font-size: 0.88rem; line-height: 1.35; text-align: center; }
+  .mv-sub { margin: 16px 0 6px; color: var(--muted); font-size: 0.92rem; }
+  .mv-intro-svg { display: block; width: 100%; height: auto; color: var(--muted); overflow: visible; }
+  .mv-intro-text { fill: var(--text); font-family: var(--font-body); font-size: 19px; }
+  .mv-intro-name { font-size: 24px; }
+  .mv-intro-box { fill: var(--code-bg); stroke: var(--text); stroke-width: 1.5; }
+
+  .mv-keys { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: 0.92rem; }
+  .mv-swatch { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 2px; }
+  .mv-pano-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 8px; }
+  .mv-pano-head .mv-sub { margin: 0; }
+  .mv-seg { display: flex; gap: 6px; }
+  .mv-seg button {
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .mv-seg button[aria-pressed="true"] { border-color: var(--button-bg); background: var(--button-bg); }
+  .mv-pano { max-width: 600px; margin: 0 auto; }
+
+  .mv-panel { padding: 4px 12px 12px; border-radius: 10px; background: #ffffff; }
+  .mv-panel .mv-sub { margin-top: 12px; }
+  .mv-g6 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+  .mv-g6 svg { display: block; width: 100%; height: auto; }
+  .mv-g6-label { font-size: 0.78rem; line-height: 1.75; }
+
+  /* Stage 2: the sliding window, a picker, and the term of one pair at a time */
+  .mv-s2-window { max-width: 600px; margin: 0 auto; }
+  .mv-window-grid { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr); gap: 4px; }
+  .mv-window-cols { display: grid; grid-template-columns: 30% 30% 30%; column-gap: 5%; }
+  .mv-window-cols .mv-label { margin: 0; }
+  .mv-rows { position: relative; }
+  .mv-rows span { position: absolute; left: 0; color: var(--muted); font-size: 0.92rem; transform: translateY(-50%); }
+  .mv-window-svg [data-k] { cursor: pointer; }
+  /* left-aligned: "Pick a pair:" / all pair choices on one line (wrapping on phones) / Auto and Freeze */
+  .mv-pick-bar {
+    display: grid; grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-areas: "title title title" "pick pick pick" "auto frz .";
+    justify-items: start; align-items: center; gap: 10px 8px; margin: 22px 0 4px;
+  }
+  .mv-pick-bar .mv-pick-title { grid-area: title; }
+  .mv-pick-bar .mv-s2-picker { grid-area: pick; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px 20px; }
+  .mv-pick-bar .mv-pick-row { justify-content: flex-start; }
+  .mv-pick-bar .mv-auto:not(.mv-freeze) { grid-area: auto; }
+  .mv-pick-bar .mv-freeze { grid-area: frz; }
+  .mv-s2-picker button, .mv-pick-label { white-space: nowrap; }
+  .mv-pick-title { color: var(--text); font-size: 0.95rem; font-weight: 600; white-space: nowrap; }
+  .mv-controls-below { margin: 16px 0 0; }
+  .mv-pick-row { display: flex; flex-wrap: nowrap; align-items: center; justify-content: center; gap: 8px; max-width: 100%; }
+  .mv-s2-picker button, .mv-auto {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .mv-s2-picker button:hover, .mv-auto:hover { background: var(--panel); }
+  .mv-s2-picker button[aria-pressed="true"], .mv-auto[aria-pressed="true"] { border-color: var(--button-bg); background: var(--button-bg); }
+  .mv-s2-picker button[data-pick]:not([data-pick="-1"])[aria-pressed="true"] { border-color: var(--term); background: var(--term); color: #ffffff; }
+  .mv-s2-picker button.is-current { border-color: var(--term); box-shadow: inset 0 0 0 1px var(--term); }
+  .mv-s2-picker button:focus, .mv-auto:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .mv-s2-picker button:focus:not(:focus-visible), .mv-auto:focus:not(:focus-visible) { outline: none; }
+  .mv-pick-label { margin-left: 8px; color: var(--muted); font-size: 0.9rem; white-space: nowrap; }
+  .mv-pick-row .mv-pick-label:first-child { margin-left: 0; }
+  @media (max-width: 480px) {
+    .mv-pick-row { gap: 5px; }
+    .mv-s2-picker button, .mv-auto { padding: 3px 8px; font-size: 0.82rem; }
+    .mv-pick-label { margin-left: 2px; font-size: 0.8rem; }
+  }
+  .mv-term { padding-left: 12px; border-left: 3px solid var(--term); }
+  .mv-term-title { margin-bottom: 8px; color: var(--muted); font-size: 0.95rem; }
+  .mv-term-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 1.6rem minmax(0, 1fr) 1.6rem minmax(0, 1fr);
+    column-gap: 6px;
+    row-gap: 2px;
+    align-items: center;
+  }
+  .mv-term-grid > .mv-label { align-self: start; margin-top: 2px; }
+  .mv-op { color: var(--muted); font-size: 1.25rem; text-align: center; }
+  .mv-anim { opacity: 0; transform: translateY(6px); transition: opacity 0.35s ease, transform 0.35s ease; }
+  .mv-anim.is-on { opacity: 1; transform: none; }
+  .mv-warp-outline { transition: opacity 0.4s ease; }
+  .mv-anim.is-on.is-used { opacity: 0.3; }
+  .mv-product { opacity: 0; transition: opacity 0.7s ease; }
+  .mv-guides { opacity: 0; transition: opacity 0.4s ease; }
+  .mv-guides.is-on { opacity: 1; }
+  .mv-term [data-part] .mv-img { transition: box-shadow 0.3s ease; }
+  .mv-term.is-match [data-part="mask"] .mv-img,
+  .mv-term.is-match [data-part="warped"] .mv-img { box-shadow: 0 0 0 3px var(--term); }
+
+  /* Preprocessing figure: blocks fade in one after another (opacity only, so SVG transforms stay intact) */
+  .mv-prep-svg svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .pp-step { opacity: 0; transition: opacity 0.45s ease; }
+  .pp-step.is-on { opacity: 1; }
+  .pp-line { stroke-dasharray: 1 1; stroke-dashoffset: 1; transition: stroke-dashoffset 0.8s ease, opacity 0.4s ease; }
+  .pp-line.is-on { stroke-dashoffset: 0; }
+  .pp-match.is-on.is-rejected { opacity: 0.18; }
+  main p code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em; padding: 0.05em 0.3em; border-radius: 4px; background: rgba(18, 41, 107, 0.07); }
+  .pp-text { fill: var(--text); font-family: var(--font-body); font-size: 13px; }
+  .pp-small { fill: var(--muted); font-family: var(--font-body); font-size: 11.5px; }
+  @media (max-width: 560px) {
+    .pp-text { font-size: 17px; }
+    .pp-small { font-size: 16px; }
+  }
+
+  /* GV figure */
+  .mv-gv-frames { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .mv-gv-main { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 6px; }
+  .mv-gv-pano canvas, .mv-gv-zoom canvas { display: block; width: 100%; height: auto; }
+  .mv-gv-pano canvas { border-radius: 4px; }
+  .mv-gv-zoom canvas { border: 2px solid #ffffff; border-radius: 6px; box-sizing: border-box; }
+  .mv-gv-value {
+    margin-top: 10px;
+    color: #800020;
+    font-family: var(--font-head);
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    font-variant-numeric: lining-nums tabular-nums;
+    transition: color 0.3s ease;
+  }
+  .mv-gv-value.is-zero { color: #1f6b3a; }
+  .mv-gv-state { display: grid; color: var(--muted); font-size: 0.95rem; text-align: center; }
+  .mv-gv-state span { grid-area: 1 / 1; visibility: hidden; }
+  .mv-gv-state span.is-on { visibility: visible; }
+
+  .gallery + p { margin-top: 28px; }
+  /* Overview figure: four cards, one per idea; the active one lights up in turn */
+  .ov-all {
+    padding: 5px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .ov-all[aria-pressed="true"] { border-color: var(--button-bg); background: var(--button-bg); }
+  .ov-all:focus { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .ov-all:focus:not(:focus-visible) { outline: none; }
+  /* the four cards span wider than the text column, centered on it */
+  .ov-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; width: min(1040px, calc(100vw - 48px)); margin: 0 0 0 50%; padding: 0; list-style: none; transform: translateX(-50%); }
+  .ov-card {
+    position: relative;
+    min-width: 0;
+    padding: 12px 12px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    background: #ffffff;
+    transition: opacity 0.45s ease, border-color 0.45s ease, box-shadow 0.45s ease;
+  }
+  .ov-steps.is-playing .ov-card { opacity: 0.4; }
+  .ov-steps.is-playing .ov-card.is-on { opacity: 1; border-color: var(--primary); box-shadow: 0 6px 18px rgba(18, 41, 107, 0.16); }
+  .ov-head { color: var(--primary); font-family: var(--font-body); font-size: 1rem; font-weight: 600; line-height: 1.3; }
+  .ov-num {
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: 0.1em;
+    width: 22px; height: 22px; margin-right: 7px; border-radius: 50%;
+    background: var(--primary); color: #ffffff; font-family: var(--font-sans); font-size: 0.8rem; line-height: 1;
+  }
+  .ov-vis svg { display: block; width: 100%; height: auto; margin: 10px 0 8px; overflow: visible; }
+  .ov-card p { margin: 0; font-size: 0.95rem; line-height: 1.4; }
+  .ov-f { fill: var(--text); font-family: var(--font-body); font-size: 17px; }
+  .ov-pill { font-family: var(--font-body); font-size: 11.5px; }
+  .ov-more { margin-top: 18px; }
+  @media (max-width: 760px) {
+    .ov-steps { grid-template-columns: minmax(0, 1fr); gap: 14px; width: auto; margin-left: 0; transform: none; }
+    .ov-card { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); column-gap: 14px; align-items: center; }
+    .ov-head { grid-column: 1 / -1; }
+    .ov-vis svg { margin: 10px 0 0; }
+    .ov-card p { margin-top: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .ov-card { transition: none; } }
+  .mv-play:focus, .mv-seg button:focus, .mv-range:focus { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .mv-play:focus:not(:focus-visible), .mv-seg button:focus:not(:focus-visible), .mv-range:focus:not(:focus-visible) { outline: none; }
+
+  @media (max-width: 560px) {
+    .mv-gv-value { font-size: 1.15rem; white-space: nowrap; }
+    .mv-gv-state { font-size: 0.82rem; line-height: 1.35; }
+    .mv-intro-text { font-size: 27px; }
+    .mv-intro-name { font-size: 30px; }
+  }
+
+  @media (max-width: 700px) {
+    .mv-g6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  /* ---------- Responsive ---------- */
+  /* not enough margin beside the video: arrows move over its edges */
+  @media (max-width: 899px) {
+    .nav-btn {
+      width: 36px;
+      height: 36px;
+      margin-top: -18px;
+      background: var(--overlay-btn-bg);
+      color: var(--overlay-btn-fg);
+    }
+    .nav-btn:hover { background: var(--overlay-btn-bg); }
+    .nav-btn svg { width: 16px; height: 16px; }
+    .nav-btn.prev { left: 8px; }
+    .nav-btn.next { right: 8px; }
+  }
+
+  @media (max-width: 700px) {
+    .band { padding-left: 20px; padding-right: 20px; padding-bottom: 72px; }
+    .hero { padding: 100px 20px 104px; }
+    .venue { top: 48px; }
+    h2 { font-size: 1.6rem; margin-top: 56px; }
+    h3 { font-size: 1.25rem; margin-top: 48px; }
+
+    .slide-label { top: 8px; left: 8px; padding: 2px 9px; font-size: 0.9rem; }
+    .gallery-viewport { border-radius: 10px; }
+  }
+
+  @media (max-width: 560px) {
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .nav-btn, .dot::before, .hero-video { transition: none; }
+    .scroll-cue { -webkit-animation: none; animation: none; }
+    .topbar, .topbar.is-shown { transition: none; }
+    .topbar a.nav-mmcd, .rainbow { -webkit-animation: none; animation: none; }
+    .mv-anim, .mv-warp-outline, .mv-product, .mv-guides, .pp-step, .pp-line { transition: none; }
+    html { scroll-snap-type: none; }
+  }
+
+  /* ================= Theme: blue, cream, red and yellow =================
+     Overrides the base styles above. Blue frames every section, and the reading
+     column sits on a cream paper strip down the middle so the text stays easy to read. Section titles are bold
+     blue letters over a dashed rule. Red is the script accent and the outlined-button color,
+     black is the ink. MMCD gets a light red band; yellow is kept for small accents. */
+  :root {
+    --blue: #5591CC;          /* blue */
+    --blue-deep: #2F62A3;
+    --yellow: #F5C642;        /* yellow */
+    --red: #DD4A48;           /* accent red */
+    --ink: #1E1E1E;           /* ink */
+    --paper: #F3EEE2;         /* cream paper */
+    --cream: var(--paper);
+    --text: var(--ink);
+    --muted: #3D3A33;
+    --primary: var(--ink);
+    --border: rgba(30, 30, 30, 0.5);
+    --panel: rgba(85, 145, 204, 0.12);
+    --code-bg: #FFFDF7;
+    --button-bg: #ffffff;
+    --button-hover: #E6EEF7;
+    --button-fg: var(--ink);
+    --dot: rgba(30, 30, 30, 0.28);
+    --dot-active: var(--ink);
+    --focus: var(--ink);
+    --shadow: rgba(30, 30, 30, 0.25);
+    --font-display: "Archivo", "Arial Black", "Helvetica Neue", Arial, sans-serif;
+    --font-script: "Kaushan Script", "Brush Script MT", cursive;
+    --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;   /* reading text: Inter, built for screens; Archivo stays for titles */
+    --font-head: var(--font-display);
+    --font-body: var(--font-sans);
+    --sheet: 420px;           /* half the width of the cream reading strip */
+  }
+  body { font-family: var(--font-body); line-height: 1.62; }
+
+  /* bands: blue, with a cream strip under the reading column */
+  .band-cream {
+    background-color: var(--blue);
+    background-image: linear-gradient(90deg, transparent calc(50% - var(--sheet)), var(--paper) calc(50% - var(--sheet)), var(--paper) calc(50% + var(--sheet)), transparent calc(50% + var(--sheet)));
+  }
+  .band-green {
+    background-color: #F5D5CF;   /* a light tint of the accent red, so MMCD stands apart */
+    --muted: #3F2A26; --border: rgba(30, 30, 30, 0.45); --button-bg: #ffffff; --button-hover: #FBEAE7;
+    --dot: rgba(30, 30, 30, 0.3); --panel: rgba(255, 255, 255, 0.5);
+  }
+
+  /* hero: the video, a white title, a red script venue */
+  .hero h1 { color: #ffffff; font-family: var(--font-display); font-weight: 800; font-stretch: 100%; letter-spacing: -0.015em; line-height: 1.08; font-size: clamp(2rem, 4.8vw, 3.6rem); }
+  .venue { top: 52px; color: var(--red); font-family: var(--font-script); font-size: clamp(1.7rem, 3.4vw, 2.4rem); font-weight: 400; letter-spacing: 0; transform: rotate(-4deg); text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55); }
+  .authors { color: #ffffff; font-family: var(--font-display); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: clamp(1.05rem, 2vw, 1.3rem); }
+  .hero-inner { margin-top: 9vh; }
+  .hero h1 { margin-bottom: 2.6rem; }   /* more room between the title and the author names */   /* the title, names and tagline sit a little below the middle */
+  .tagline { margin-top: 4.2rem; color: #ffffff; font-family: var(--font-sans); }
+  .tagline::before { width: 70px; height: 0; border-top: 2px dashed var(--yellow); background: none; }
+
+  /* hero: linked author names, the affiliation, and the paper / code / dataset buttons */
+  .authors a { color: inherit; text-decoration: none; border-bottom: 2px solid transparent; transition: border-color 0.2s ease; }
+  .authors a:hover, .authors a:focus-visible { border-bottom-color: var(--yellow); }
+  .affiliation { max-width: none; margin: 0.7rem auto 0; text-align: center; color: rgba(255, 255, 255, 0.9); font-family: var(--font-sans); font-size: clamp(0.95rem, 1.6vw, 1.1rem); font-weight: 500; letter-spacing: 0.01em; }
+  .hero-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 12px; max-width: var(--measure); margin: 0 auto 2.2rem; padding: 6px 0 0; font-family: var(--font-display); }
+  .hero-link { color: var(--ink); font-weight: 800; font-size: 1.1rem; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; }
+  a.hero-link[href] { color: var(--blue-deep); border-bottom: 2px solid var(--yellow); }
+  a.hero-link[href]:hover { color: var(--red); }
+  .hero-sep { color: var(--ink); font-weight: 800; }
+  .hero-soon { flex-basis: 100%; margin-top: 4px; text-align: center; color: var(--red); font-family: var(--font-sans); font-size: 0.92rem; font-weight: 600; letter-spacing: 0.02em; }
+  .hero .tagline { margin-top: 2.6rem; }
+  @media (min-width: 1025px) and (hover: hover) { .hero .tagline { margin-top: 3.6rem; } }   /* computers only: the tagline a little lower */
+
+  /* top bar */
+  .topbar { background-color: var(--blue); border-bottom: 2px solid var(--ink); }
+  .topbar a { color: var(--ink); font-family: var(--font-display); font-weight: 800; border-bottom-width: 3px; }
+  .topbar a:hover, .topbar a.is-active { border-bottom-color: var(--yellow); }
+  .topbar a.topbar-home, .topbar a.topbar-home b { color: var(--yellow); font-weight: 900; }
+  .topbar a.topbar-home { font-size: 1.35rem; line-height: 1.1; letter-spacing: -0.01em; }   /* the MViS name, larger than the links */
+  @media (max-width: 600px) { .topbar a.topbar-home { font-size: 1.25rem; } }
+  .topbar a.topbar-links a.nav-mmcd, .topbar .topbar-links a.nav-mmcd { color: #ffffff; }   /* MMCD in the panel: white */
+  .topbar a.nav-mmcd, .rainbow, .band-green .rainbow {
+    background: none; color: inherit; -webkit-text-fill-color: currentColor; -webkit-animation: none; animation: none;
+  }
+
+  /* section titles: heavy blue letters over a dashed black rule */
+  h2 {
+    padding-bottom: 12px; border-bottom: 2px dashed var(--ink);
+    color: var(--blue-deep); font-family: var(--font-display); font-weight: 800; font-stretch: 100%;
+    font-size: clamp(1.4rem, 3vw, 1.8rem); letter-spacing: -0.01em; line-height: 1.15;
+  }
+  h2#mmcd, h2#background, h2#benchmark, h2#gv, h2#more-results, h2#citation, h2#mvis, h2#mvis b { font-weight: 900; }
+  h2#mvis b { color: var(--red); }
+  h3 { color: var(--blue-deep); font-family: var(--font-display); font-weight: 800; font-size: 1.4rem; letter-spacing: -0.005em; line-height: 1.15; }
+  h4 { color: var(--red); font-family: var(--font-display); font-size: 0.98rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+  .band-green h2, .band-green h3, .band-green h4, .band-green .stats dd { color: #C8302E; }   /* MMCD titles in a deep red, dark enough to read on the light red band */
+  h4.mv-step-h { font-size: 1.02rem; }
+
+  p, .contributions, .steps { font-size: 1.05rem; }
+  main a { color: var(--blue-deep); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  main p code { background: rgba(85, 145, 204, 0.16); }
+  .caption { color: var(--muted); font-size: 0.93rem; }
+
+  /* contributions: red numbers, black bold phrases with a yellow marker underline that draws in */
+  .contributions li::marker { color: var(--red); font-family: var(--font-display); font-weight: 900; }
+  .steps li::marker { color: var(--red); font-weight: 900; }
+  .contributions b {
+    color: var(--ink); padding-bottom: 0;
+    background-image: linear-gradient(var(--yellow), var(--yellow)); background-size: 100% 0.42em; background-position: 0 90%;
+  }
+  .contributions.ul-wait b { background-size: 0% 0.42em; }
+
+  /* takeaway: a red script label over a heavy blue statement */
+  .takeaway .eyebrow { color: var(--red); font-family: var(--font-script); font-size: 1.7rem; font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .takeaway .statement { color: var(--blue-deep); font-family: var(--font-display); font-weight: 900; font-size: clamp(1.3rem, 2.6vw, 1.8rem); line-height: 1.15; }
+
+  /* MMCD stats */
+  .stats { border-top: 2px dashed var(--ink); border-bottom: 2px dashed var(--ink); }
+  .stats dd { color: var(--blue-deep); font-family: var(--font-display); font-weight: 800; }
+  .stats dt { color: var(--ink); font-family: var(--font-display); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.8rem; }
+
+  /* figures, tables and BibTeX: white cards with a black edge and a blue offset shadow */
+  .mv-fig:not(#mv-overview), .table-wrap, .bibtex {
+    padding: 16px; border: 2px solid var(--ink); border-radius: 0; background: #FFFDF7; box-shadow: 6px 6px 0 var(--blue);
+  }
+  .table-wrap { max-width: calc(var(--wide) + 44px); padding: 10px 16px; }
+  table.results .group td { color: var(--red); font-weight: 700; }   /* the method-family rows of the results table */
+  .bibtex pre { padding: 6px 4px; }
+  .mv-panel { border-radius: 0; }
+  .ov-card { border: 2px solid var(--ink); border-radius: 0; background: #FFFDF7; }
+  .ov-steps.is-playing .ov-card { opacity: 1; }   /* cards stay opaque over the paper edge; only their content dims */
+  .ov-steps.is-playing .ov-card > * { opacity: 0.45; transition: opacity 0.45s ease; }
+  .ov-steps.is-playing .ov-card.is-on > * { opacity: 1; }
+  .ov-steps.is-playing .ov-card.is-on { border-color: var(--ink); background: #ffffff; box-shadow: 6px 6px 0 var(--blue); }
+  .ov-head { color: var(--blue-deep); font-family: var(--font-display); font-weight: 900; font-size: 1.02rem; }
+  .ov-num { background: var(--red); font-family: var(--font-display); font-weight: 800; }
+  #mv-overview > .mv-controls { margin-bottom: 18px; }
+
+  /* video carousels: a black frame with a blue offset shadow, square yellow arrow buttons, bar indicators */
+  .gallery-viewport {
+    border: 3px solid var(--ink); border-radius: 0; box-shadow: 8px 8px 0 var(--blue);
+    -webkit-mask-image: none; mask-image: none;   /* the mask only rounded the corners, and it clipped the shadow */
+  }
+  .band-green .gallery-viewport { box-shadow: 8px 8px 0 var(--red); }
+  .band-green .slide-label { top: 0; left: 0; box-shadow: none; border-width: 0 2px 2px 0; }   /* MMCD: the label sits in the frame's top-left corner, off the footage */
+  .slide-label {
+    top: 14px; left: 14px; padding: 3px 10px; border: 2px solid var(--ink); border-radius: 0;
+    background: #ffffff; color: var(--ink); box-shadow: 3px 3px 0 var(--ink);
+    font-family: var(--font-display); font-weight: 800; font-size: 0.95rem;
+  }
+  .nav-btn {
+    width: 44px; height: 44px; margin-top: -22px; border: 2px solid var(--ink); border-radius: 0;
+    background: var(--yellow); color: var(--ink); box-shadow: 4px 4px 0 var(--ink);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .nav-btn svg { stroke-width: 3; }
+  .nav-btn:hover { background: var(--yellow); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+  .nav-btn:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--ink); }
+  .gallery-dots { margin-top: 16px; gap: 2px; }
+  .dot { width: 30px; }
+  .dot::before {
+    width: 18px; height: 8px; border: 2px solid var(--ink); border-radius: 0; background: transparent;
+    transition: width 0.2s ease, background-color 0.2s ease;
+  }
+  .dot:hover::before { transform: none; background: rgba(30, 30, 30, 0.15); }
+  .dot.active::before { width: 26px; background: var(--red); }
+  .tap-play { border: 2px solid var(--ink); border-radius: 0; background: var(--red); color: #ffffff; box-shadow: 4px 4px 0 var(--ink); }
+
+  /* buttons: outlined boxes; the pressed one fills */
+  .mv-play { border: 2px solid var(--ink); }
+  .copy-btn, .ov-all, .mv-seg button, .mv-s2-picker button, .mv-auto {
+    border: 2px solid var(--red); border-radius: 0; background: transparent; color: var(--red);
+    font-family: var(--font-display); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.82rem;
+  }
+  .mv-s2-picker button { text-transform: none; font-size: 0.9rem; }
+  /* the pair picker: dark outlines, so red stays the temporal-pair color; Auto and Freeze fill dark when on */
+  .mv-s2-picker button, .mv-auto { border-color: var(--ink); color: var(--ink); }
+  .mv-s2-picker button:hover, .mv-auto:hover { background: rgba(30, 30, 30, 0.06); }
+  .mv-auto[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #ffffff; }
+  .copy-btn:hover, .ov-all:hover, .mv-seg button:hover, .mv-s2-picker button:hover, .mv-auto:hover { background: rgba(221, 74, 72, 0.1); }
+  .ov-all[aria-pressed="true"], .mv-seg button[aria-pressed="true"], .mv-auto[aria-pressed="true"],
+  .mv-s2-picker button[aria-pressed="true"] { border-color: var(--red); background: var(--red); color: #ffffff; }
+  .mv-s2-picker button[data-pick]:not([data-pick="-1"])[aria-pressed="true"] { border-color: var(--term); background: var(--term); color: #ffffff; }
+  .mv-range { accent-color: var(--red); }
+
+  /* narrow screens: the cream strip fills the width */
+  @media (max-width: 900px) { :root { --sheet: 50vw; } }
+  @media (max-width: 480px) {
+    h2 { font-size: 1.4rem; }
+    .mv-fig:not(#mv-overview), .table-wrap, .bibtex { padding: 10px; box-shadow: 4px 4px 0 var(--blue); }
+  }
+  /* "Read more" toggles: the explanatory text under a few headings stays folded until asked for */
+  .more-text { max-width: var(--measure); margin: 0 auto 14px; }
+  .more-text > summary {
+    display: inline-flex; align-items: center; gap: 8px; list-style: none; cursor: pointer;
+    padding: 4px 12px; border: 2px solid var(--ink); background: transparent; color: var(--ink);
+    font-family: var(--font-display); font-weight: 800; font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+  }
+  .more-text > summary::-webkit-details-marker { display: none; }
+  .more-text > summary::after {
+    content: ""; width: 7px; height: 7px; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor;
+    transform: translateY(-2px) rotate(45deg); transition: transform 0.2s ease;
+  }
+  .more-text[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+  .more-text > summary:hover { background: rgba(30, 30, 30, 0.06); }
+  .more-text > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+  .more-text[open] > summary { font-size: 0; padding: 4px 10px; }   /* open: the label switches to "Hide" */
+  .more-text[open] > summary::before { content: "Hide"; font-size: 0.82rem; }
+  .more-text > p { margin-top: 12px; }
+  /* footer: a blue strip, like the top bar */
+  .site-footer {
+    padding: 18px 16px; border-top: 2px solid var(--ink); background: var(--blue); color: var(--ink);
+    font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.02em; text-align: center;
+  }
+  /* mobile devices (any phone or tablet, or a narrow window): Copy sits above the citation, right-aligned */
+  @media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+    .bibtex { display: flex; flex-direction: column; }
+    .bibtex .copy-btn { position: static; align-self: flex-end; margin-bottom: 8px; }
+  }
+  @media (max-width: 600px) {
+    .site-footer { font-size: 0.8rem; white-space: nowrap; }   /* phones: one line */
+  }
+  @media (max-width: 370px) {
+    .site-footer { padding-left: 8px; padding-right: 8px; font-size: 0.7rem; letter-spacing: 0; }   /* the narrowest phones: still one line */
+  }
+  /* ================= Math: the reading font, italic variables, as in the Stage 1 figure ================= */
+  var, svg tspan[font-style="italic"] { font-family: var(--font-body); font-style: italic; font-weight: 400; }   /* math: the reading font, italic letters (as in the Stage 1 figure) */
+  .m, main sub, main sup, .mv-ss, svg tspan[font-size], .ov-approx { font-family: var(--font-body); font-weight: 400; }
+  var.bm, svg tspan[font-style="italic"][font-weight="bold"] { font-weight: 400; }
+  .mv-s2-picker button var { font-family: inherit; font-weight: inherit; }   /* Pick a pair: plain button text, not the LaTeX face */
+  .slide-label:has(var), th:has(> var), .mv-rows span { font-family: var(--font-body); font-weight: 400; }   /* labels that are only math, like "N = 4" */
+  .mv-g6-label, .mv-g6-label var, .mv-g6-label .mv-ss, .mv-g6-label sup, .mv-g6-label sub { font-family: var(--font-body); font-weight: 400; }   /* Stage 1 pair formulas: plain reading font, as before the LaTeX face */
+</style>
+</head>
+<body>
+<!-- ============ Section navigation, shown once the hero has scrolled away ============ -->
+<div class="topbar" id="topbar">
+  <nav aria-label="Sections">
+    <a href="#top" class="topbar-home"><b>MViS</b></a>
+    <span class="topbar-links">
+      <a href="#background">Background</a>
+      <a href="#mvis">Method</a>
+      <a href="#mmcd" class="nav-mmcd">MMCD<span class="nav-long"> Dataset</span></a>
+      <span class="nav-break" aria-hidden="true"></span>
+      <a href="#benchmark">MC Benchmark</a>
+      <a href="#gv">GV</a>
+      <a href="#citation">BibTeX</a>
+    </span>
+  </nav>
+</div>
+<header class="hero" id="top">
+  <video class="hero-video" src="videos/1_n4_mvis_volcano.mp4" autoplay muted loop playsinline webkit-playsinline preload="auto" aria-hidden="true"></video>
+  <div class="hero-shade"></div>
+  <p class="venue">NeurIPS 2026</p>
+  <div class="hero-inner">
+    <h1>Video Stitching from Multiple Moving Cameras</h1>
+    <ul class="authors">
+      <li><a href="https://shiraif.github.io/" target="_blank" rel="noopener">Shira Ifergane</a></li>
+      <li><a href="https://royamoyal.github.io/" target="_blank" rel="noopener">Roy Amoyal</a></li>
+      <li><a href="https://www.linkedin.com/in/shahar-ben-ishay/" target="_blank" rel="noopener">Shahar Benishay</a></li>
+      <li><a href="https://www.orenfreifeld.com/" target="_blank" rel="noopener">Oren Freifeld</a></li>
+    </ul>
+    <p class="affiliation">Ben-Gurion University of the Negev</p>
+    <p class="tagline">The first video stitching method capable of handling more than 2 freely moving cameras</p>
+  </div>
+  <!-- the walkie-talkie clip is embedded, so the button works wherever the page is opened -->
+  <a class="scroll-cue" href="#contributions" aria-label="Scroll to the contributions"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5l6 6 6-6"/></svg></a>
+</header>
+
+<main>
+  <section class="band band-cream">
+
+    <!-- Paper, code and dataset: when a link is ready, add href="..." to its <a>; when all are ready, delete the "Coming soon" span -->
+    <nav class="hero-links" aria-label="Paper, code and dataset">
+      <a class="hero-link">Paper</a><span class="hero-sep" aria-hidden="true">&middot;</span><a class="hero-link">Code</a><span class="hero-sep" aria-hidden="true">&middot;</span><a class="hero-link">Dataset</a>
+      <span class="hero-soon">Coming soon</span>
+    </nav>
+
+    <!-- ============ Contributions ============ -->
+    <h2 id="contributions">Contributions</h2>
+    <ol class="contributions">
+      <li><b>First method</b> for stitching videos from more than two freely moving cameras.</li>
+      <li><b>Regularization-free formulation</b> for joint alignment across views and time.</li>
+      <li><b>Annotated multi-view video dataset</b> for unconstrained camera motion.</li>
+      <li><b>Benchmark</b> for video stitching from multiple moving cameras.</li>
+      <li><b>Variance-based geometric metric</b> for multi-view alignment.</li>
+    </ol>
+
+    <!-- ============ Qualitative results ============ -->
+    <h2 id="background">Why Existing Methods Fall Short</h2>
+
+    <!-- Comparison with video stitching methods -->
+    <h3>Video Stitching: At Most Three Cameras, in a Fixed Order</h3>
+    <details class="more-text">
+      <summary>Read more</summary>
+      <p>
+        Most moving-camera video stitching methods are limited to two cameras. Among existing video stitching
+        methods, StabStitch++ is the only one supporting more than two inputs, but it is limited to
+        <span class="m"><var>N</var>&nbsp;=&nbsp;3</span> and requires a fixed spatial ordering of the cameras.
+        This assumes that the cameras&rsquo; relative ordering remains fixed, whereas in freely
+        moving multi-camera capture the view-intersection graph can change over time. As shown below, when cameras
+        swap order, its output degrades.
+      </p>
+    </details>
+
+    <div class="gallery is-wide" data-gallery data-label="StabStitch++ and MViS, N = 3">
+      <div class="gallery-stage">
+        <button class="nav-btn prev" type="button" aria-label="Previous video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 4 6.5 10l6 6"/></svg></button>
+        <div class="gallery-viewport">
+          <div class="gallery-slide"><video src="videos/2_stabstitch++_vs_mvis.mp4" muted loop playsinline webkit-playsinline preload="metadata"></video></div>
+          <div class="gallery-slide"><video src="videos/3_stabstitch++_vs_mvis.mp4" muted loop playsinline webkit-playsinline preload="none"></video></div>
+          <div class="gallery-slide"><video src="videos/4_stabstitch++_vs_mvis.mp4" muted loop playsinline webkit-playsinline preload="none"></video></div>
+        </div>
+        <button class="nav-btn next" type="button" aria-label="Next video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4l6 6-6 6"/></svg></button>
+      </div>
+      <div class="gallery-dots"></div>
+    </div>
+
+
+    <!-- Comparison with MIS -->
+    <h3>Image Stitching: Spatially Coherent, Temporally Inconsistent</h3>
+    <details class="more-text">
+      <summary>Read more</summary>
+      <p>
+        In multiple video stitching from freely moving cameras, Multiple Image Stitching (MIS) methods produce good panoramas at individual
+        time steps but yield temporally incoherent results when applied frame by frame. This failure stems from the
+        fact that, due to independent camera motions, different panoramic regions usually move differently between
+        times <var>t</var> and <span class="m"><var>t</var>&nbsp;+&nbsp;1</span>, which per-frame stitching does not model.
+      </p>
+    </details>
+    <div class="gallery is-wide" data-gallery data-label="MIS methods and MViS">
+      <div class="gallery-stage">
+        <button class="nav-btn prev" type="button" aria-label="Previous video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 4 6.5 10l6 6"/></svg></button>
+        <div class="gallery-viewport">
+          <div class="gallery-slide">
+            <span class="slide-label"><var>N</var>&nbsp;=&nbsp;4</span>
+            <video src="videos/6_n4_mis_methods_vs_mvis.mp4" muted loop playsinline webkit-playsinline preload="metadata"></video>
+          </div>
+          <div class="gallery-slide">
+            <span class="slide-label"><var>N</var>&nbsp;=&nbsp;5</span>
+            <video src="videos/5_n5_mis_methods_vs_mvis.mp4" muted loop playsinline webkit-playsinline preload="none"></video>
+          </div>
+        </div>
+        <button class="nav-btn next" type="button" aria-label="Next video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4l6 6-6 6"/></svg></button>
+      </div>
+      <div class="gallery-dots"></div>
+    </div>
+    <p class="caption">MIS methods and MViS on MMCD scenes with <span class="m"><var>N</var>&nbsp;=&nbsp;4 and 5</span> cameras.</p>
+
+    <!-- Comparison with MIS variants -->
+    <h3>Adding Stabilization Helps, but it is Not Enough</h3>
+    <details class="more-text">
+      <summary>Read more</summary>
+      <p>
+        We augment key MIS methods with two stabilization strategies: (1) temporal
+        regularization penalizing changes in estimated transformations between consecutive frames (TR), and
+        (2) post-hoc smoothing of per-frame transformations (PS). Both improve stability over per-frame baselines
+        but still lose to MViS. This is expected: in multiple moving-camera videos, the optimal stabilization
+        strength is not uniform, since different cameras, and hence different panoramic regions, can have different
+        and possibly time-dependent motions.
+      </p>
+    </details>
+    <div class="gallery is-wide" data-gallery data-label="MIS variants and MViS">
+      <div class="gallery-stage">
+        <button class="nav-btn prev" type="button" aria-label="Previous video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 4 6.5 10l6 6"/></svg></button>
+        <div class="gallery-viewport">
+          <!-- Add more slides here; the arrows and dots appear automatically once there are two or more. -->
+          <div class="gallery-slide"><video src="videos/8_mis_variants_vs_mvis.mp4" muted loop playsinline webkit-playsinline preload="metadata"></video></div>
+        </div>
+        <button class="nav-btn next" type="button" aria-label="Next video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4l6 6-6 6"/></svg></button>
+      </div>
+      <div class="gallery-dots"></div>
+    </div>
+    <p class="caption">Stabilized MIS variants and MViS.</p>
+
+    <!-- Takeaway -->
+    <div class="takeaway">
+      <p class="eyebrow">Takeaway</p>
+      <p class="statement">This calls for a video-specific formulation that jointly enforces spatial and temporal consistency across all cameras.</p>
+    </div>
+
+    <!-- ============ MViS ============ -->
+    <h2 id="mvis"><b>M</b>ultiple <b>Vi</b>deo <b>S</b>titching (<b>MViS</b>)</h2>
+    <p>
+      MViS is an unsupervised optimization method that aligns videos from any number of freely moving cameras,
+      with no fixed or known camera ordering and a view-intersection graph that may change over time. It only
+      assumes that this graph is connected at each time and that the videos are approximately synchronized.
+    </p>
+
+    <!-- Synthetic scene shared by the method figures of this section. Every frame is a view of it through a camera
+         transform; between the back layer and the fence, a hot-air balloon drifts and a cat walks to the red house
+         (both drawn by the script below). -->
+    <svg class="mv-defs" aria-hidden="true" focusable="false">
+      <defs>
+        <clipPath id="mv-clip"><rect width="168" height="96"/></clipPath>
+        <g id="mv-world-back">
+          <rect width="1000" height="400" fill="#9CCBF0"/><rect width="1000" height="90" fill="#7EB8EA"/>
+          <circle cx="820" cy="70" r="18" fill="#FFF3C4"/>
+          <ellipse cx="180" cy="62" rx="46" ry="12" fill="#FFFFFF"/><ellipse cx="560" cy="52" rx="60" ry="13" fill="#FFFFFF"/><ellipse cx="612" cy="62" rx="34" ry="9" fill="#EEF4FA"/><ellipse cx="300" cy="112" rx="40" ry="9" fill="#EEF4FA"/>
+          <polygon points="0,175 80,135 160,152 260,108 360,142 470,98 560,138 660,112 760,148 860,118 1000,152 1000,210 0,210" fill="#6E7F99"/>
+          <polygon points="260,108 285,121 270,124 248,116" fill="#FFFFFF"/><polygon points="470,98 497,114 480,117 458,108" fill="#FFFFFF"/>
+          <rect y="198" width="1000" height="16" fill="#3FA7C9"/><rect y="203" width="1000" height="2" fill="#A9DCEB"/>
+          <polygon points="0,214 140,208 300,216 460,206 620,214 800,207 1000,214 1000,400 0,400" fill="#7DBB4E"/>
+          <rect y="270" width="1000" height="22" fill="#74B246"/><rect y="330" width="1000" height="26" fill="#6BAA40"/>
+          <polygon points="400,400 468,238 492,238 600,400" fill="#C9B79C"/>
+          <line x1="480" y1="242" x2="500" y2="400" stroke="#F2EDE3" stroke-width="2" stroke-dasharray="8 8"/>
+          <rect x="257" y="215" width="6" height="34" fill="#5B3A24"/><circle cx="260" cy="208" r="18" fill="#2F6B3E"/>
+          <rect x="356" y="200" width="7" height="38" fill="#5B3A24"/><circle cx="360" cy="192" r="22" fill="#275E35"/><circle cx="346" cy="204" r="13" fill="#3F7D4A"/>
+          <rect x="527" y="205" width="6" height="30" fill="#5B3A24"/><circle cx="530" cy="200" r="16" fill="#2C6639"/>
+          <rect x="697" y="200" width="7" height="40" fill="#5B3A24"/><circle cx="700" cy="190" r="24" fill="#22552F"/>
+          <rect x="425" y="186" width="70" height="50" fill="#F5EFE4"/><polygon points="417,188 460,160 503,188" fill="#8E3B2A"/><rect x="477" y="163" width="7" height="16" fill="#8E3B2A"/>
+          <rect x="452" y="210" width="12" height="26" fill="#4E3322"/><rect x="432" y="196" width="12" height="10" fill="#3D6C99"/><rect x="476" y="196" width="12" height="10" fill="#3D6C99"/>
+          <rect x="585" y="208" width="50" height="32" fill="#B5462E"/><polygon points="580,210 610,192 640,210" fill="#8E3B2A"/><rect x="603" y="222" width="14" height="18" fill="#4E3322"/>
+        </g>
+        <g id="mv-world-front">
+          <rect x="280" y="288" width="440" height="3" fill="#5B3A24"/><rect x="280" y="296" width="440" height="3" fill="#5B3A24"/>
+          <rect x="282" y="284" width="3" height="20" fill="#4E3322"/><rect x="330" y="284" width="3" height="20" fill="#4E3322"/><rect x="378" y="284" width="3" height="20" fill="#4E3322"/><rect x="426" y="284" width="3" height="20" fill="#4E3322"/><rect x="522" y="284" width="3" height="20" fill="#4E3322"/><rect x="570" y="284" width="3" height="20" fill="#4E3322"/><rect x="618" y="284" width="3" height="20" fill="#4E3322"/><rect x="666" y="284" width="3" height="20" fill="#4E3322"/><rect x="714" y="284" width="3" height="20" fill="#4E3322"/>
+          <ellipse cx="320" cy="345" rx="30" ry="14" fill="#2F6B3E"/><ellipse cx="640" cy="350" rx="36" ry="15" fill="#2F6B3E"/><ellipse cx="582" cy="325" rx="20" ry="9" fill="#3A7546"/>
+        </g>
+        <g id="mv-balloon-body">
+          <line x1="-4" y1="15.5" x2="-3" y2="22" stroke="#4E3322" stroke-width="0.7"/>
+          <line x1="4" y1="15.5" x2="3" y2="22" stroke="#4E3322" stroke-width="0.7"/>
+          <rect x="-3.6" y="22" width="7.2" height="5.2" rx="0.8" fill="#8a5a2b" stroke="#4e3218" stroke-width="0.6"/>
+          <path d="M0,-16 C10.01,-16 15,-8 15,-1 C15,7 7.01,12 4.00,16 L-4.00,16 C-7.01,12 -15,7 -15,-1 C-15,-8 -10.01,-16 0,-16 Z" fill="#D93A3A"/>
+          <path d="M0,-16 C8.00,-16 12,-8 12,-1 C12,7 5.60,12 3.20,16 L-3.20,16 C-5.60,12 -12,7 -12,-1 C-12,-8 -8.00,-16 0,-16 Z" fill="#F4C542"/>
+          <path d="M0,-16 C6.00,-16 9,-8 9,-1 C9,7 4.20,12 2.40,16 L-2.40,16 C-4.20,12 -9,7 -9,-1 C-9,-8 -6.00,-16 0,-16 Z" fill="#FFFFFF"/>
+          <path d="M0,-16 C4.00,-16 6,-8 6,-1 C6,7 2.80,12 1.60,16 L-1.60,16 C-2.80,12 -6,7 -6,-1 C-6,-8 -4.00,-16 0,-16 Z" fill="#2F62A3"/>
+          <path d="M0,-16 C2.00,-16 3,-8 3,-1 C3,7 1.40,12 0.80,16 L-0.80,16 C-1.40,12 -3,7 -3,-1 C-3,-8 -2.00,-16 0,-16 Z" fill="#D93A3A"/>
+          <path d="M0,-16 C10.01,-16 15,-8 15,-1 C15,7 7.01,12 4.00,16 L-4.00,16 C-7.01,12 -15,7 -15,-1 C-15,-8 -10.01,-16 0,-16 Z" fill="none" stroke="#5b2a3a" stroke-width="0.8"/>
+        </g>
+        <g id="mv-cat-body">
+          <path d="M-8.5,-10.5 C-13.5,-12 -15.5,-16.5 -13.8,-22.5" fill="none" stroke="#6f6f6a" stroke-width="3.2" stroke-linecap="round"/>
+          <path d="M-8.5,-10.5 C-13.5,-12 -15.5,-16.5 -13.8,-22.5" fill="none" stroke="#D9D9D5" stroke-width="2" stroke-linecap="round"/>
+          <ellipse cx="0" cy="-9" rx="9.5" ry="4.6" fill="#EDEDEA" stroke="#6f6f6a" stroke-width="0.7"/>
+          <path d="M-4,-13 L-3,-8.6 M-0.5,-13.6 L0.3,-9 M3,-13.3 L3.6,-9.2" stroke="#B4B4AF" stroke-width="1.1" stroke-linecap="round"/>
+          <polygon points="7.6,-16 8.6,-21 11,-17.2" fill="#EDEDEA" stroke="#6f6f6a" stroke-width="0.6" stroke-linejoin="round"/>
+          <polygon points="11.2,-17.6 13.6,-21.2 14.4,-16" fill="#EDEDEA" stroke="#6f6f6a" stroke-width="0.6" stroke-linejoin="round"/>
+          <circle cx="10.5" cy="-13.5" r="4.3" fill="#EDEDEA" stroke="#6f6f6a" stroke-width="0.7"/>
+          <path d="M9,-16.6 L9.6,-15 M11,-17.2 L11.1,-15.5" stroke="#B4B4AF" stroke-width="0.8" stroke-linecap="round"/>
+          <circle cx="12.4" cy="-14.2" r="0.75" fill="#2b2b2b"/>
+          <circle cx="14.6" cy="-12.9" r="0.55" fill="#E39AA6"/>
+        </g>
+      </defs>
+    </svg>
+
+    <figure class="mv-fig" id="mv-intro" aria-label="Three input videos from moving cameras pass through MViS and become one panoramic video">
+      <svg class="mv-intro-svg" viewBox="0 0 760 316" aria-hidden="true">
+        <defs>
+          <marker id="mv-intro-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0 0L10 5L0 10z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <text class="mv-intro-text" x="4" y="22" text-anchor="start"><tspan font-style="italic">N</tspan> Input Videos</text>
+        <g class="mv-intro-arrows" stroke="currentColor" stroke-width="2" marker-end="url(#mv-intro-head)">
+          <line x1="152" y1="82" x2="194" y2="82"/>
+          <line x1="152" y1="172" x2="194" y2="172"/>
+          <line x1="152" y1="262" x2="194" y2="262"/>
+          <line x1="294" y1="172" x2="334" y2="172"/>
+        </g>
+        <polygon class="mv-intro-box" points="200,36 290,110 290,234 200,308"/>
+        <text class="mv-intro-text mv-intro-name" x="245" y="179" text-anchor="middle">MViS</text>
+        <text class="mv-intro-text mv-intro-pano-label" x="560" y="40" text-anchor="middle">Video Panorama</text>
+        <g class="mv-intro-dynamic"></g>
+      </svg>
+    </figure>
+    <p class="caption">
+      MViS turns <var>N</var> videos from moving cameras into one panoramic video. Schematic on a synthetic scene
+      with <span class="m"><var>N</var>&nbsp;=&nbsp;3</span>, used in the figures below.
+    </p>
+    <!-- ============ How MViS works ============ -->
+    <h3 class="snap-h">The Method at a Very High Level</h3>
+    <details class="more-text">
+      <summary>Read more</summary>
+      <p>
+        MViS has three steps. <b>Preprocessing</b> estimates noisy pairwise homographies (ORTs); then a lightweight network,
+        which takes a sliding window of 2<var>N</var> frames and predicts a homography per frame, is optimized at test time,
+        first with a geometric loss (<b>Stage&nbsp;1</b>)
+        and then with an appearance loss (<b>Stage&nbsp;2</b>). Both losses compare pairs of frames only, yet every frame
+        lands aligned in a shared panorama.
+      </p>
+    
+
+    <h4 class="snap-h mv-step-h">Preprocessing</h4>
+    <p>
+      First, we match keypoints and estimate pairwise homographies, which we call Observed Relative Transformations
+      (ORTs). These will guide both stages of optimization.
+    </p>
+
+    <figure class="mv-fig" id="mv-prep" aria-label="Preprocessing for one pair: the two frames, matched correspondences, the ORT that warps one frame onto the other, and the overlap mask">
+      <div class="mv-prep-svg"></div>
+    </figure>
+
+    <h4 class="snap-h mv-step-h">Stage 1: The ORT-guided Geometric Loss</h4>
+    <p>
+      For each pair, Stage 1 maps a regular grid <var class="bm">G</var> through both the ORT and the composition
+      of the predicted homographies, and penalizes the distance between the two warped grids.
+    </p>
+
+    <figure class="mv-fig" id="mv-stage1" aria-label="Stage 1: predicted grid points moving from the identity onto the ORT grid points for every pair of one window">
+      <div class="mv-panel">
+        <div class="mv-sub"><span style="color:#4169e1">&#9670;</span> the grid <var class="bm">G</var> mapped by the ORT
+          &nbsp;&nbsp; <span style="color:#e03131">&times;</span> the grid <var class="bm">G</var> mapped by the composition of the predictions</div>
+        <div class="mv-sub">Multi-view pairs at time <var>t</var></div>
+        <div class="mv-g6 mv-top"></div>
+        <div class="mv-sub">Temporal pairs between <var>t</var> and <span class="m"><var>t</var>&nbsp;+&nbsp;1</span></div>
+        <div class="mv-g6 mv-bottom"></div>
+      </div>
+      <div class="mv-controls mv-controls-below">
+        <button class="mv-play" type="button" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5v15l12.5-7.5z"/></svg></button>
+        <span class="mv-end">Identity</span>
+        <input class="mv-range" type="range" min="0" max="100" step="1" value="0" aria-label="Optimization progress">
+        <span class="mv-end">Converged</span>
+      </div>
+    </figure>
+    <p class="caption">
+      In each pair, the composition
+      (<span style="color:#e03131">&times;</span>) is pulled toward the ORT (<span style="color:#4169e1">&#9670;</span>).
+    </p>
+
+    <h4 class="snap-h mv-step-h">Stage 2: The Appearance Loss</h4>
+    <p>
+      Stage 2 refines the residual misalignment of Stage&nbsp;1 with an appearance loss on the same pairs. Frame
+      <var>i</var> is warped into the view of frame <var>j</var> by the composition <span class="m">(<var class="bm">H</var><sub><var>j</var></sub>)<sup>&minus;1</sup><var class="bm">H</var><sub><var>i</var></sub></span> and compared with it,
+      only inside the pair&rsquo;s overlap mask.
+    </p>
+
+    <figure class="mv-fig mv-s2" id="mv-stage2" aria-label="Stage 2: the sliding window with its pairs, and the appearance-loss term of the chosen pair: one frame times the overlap mask, minus the other frame warped into its view">
+      <div class="mv-s2-window">
+        <div class="mv-sub">Sliding window <var>S</var><sub><var>t</var></sub></div>
+        <div class="mv-window-grid">
+          <span></span>
+          <div class="mv-window-cols"><span class="mv-label">Video 1</span><span class="mv-label">Video 2</span><span class="mv-label">Video 3</span></div>
+          <div class="mv-rows"><span style="top:25%"><var>t</var></span><span style="top:69%"><var>t</var>+1</span></div>
+          <div class="mv-window-svg"></div>
+        </div>
+      </div>
+      <div class="mv-s2-term"></div>
+      <div class="mv-pick-bar">
+        <span class="mv-pick-title" id="mv-pick-title">Pick a pair:</span>
+        <div class="mv-s2-picker" role="group" aria-labelledby="mv-pick-title"></div>
+      </div>
+    </figure>
+
+    <h4 class="snap-h mv-step-h">From the Prediction to a Panoramic Video</h4>
+    <p>
+      After optimization, each frame <var>F</var><span class="mv-ss"><span><var>t</var></span><span><var>i</var></span></span> is warped into the
+      panorama by its homography <var class="bm">H</var><span class="mv-ss"><span><var>t</var></span><span><var>i</var></span></span>. Because the losses depend
+      only on relative transformations, the homographies are defined only up to a common global homography, while
+      the correspondences they induce between frames are unique. Rendering therefore needs a reference: video 1 at
+      each time, applying <span class="m">(<var class="bm">H</var><span class="mv-ss"><span><var>t</var></span><span>1</span></span>)<sup>&minus;1</sup></span> to all frames
+      at time <var>t</var>, or video 1 at the first time, applying
+      <span class="m">(<var class="bm">H</var><span class="mv-ss"><span>1</span><span>1</span></span>)<sup>&minus;1</sup></span> to all frames. This choice
+      affects only visualization; MViS gives video 1 no special weight.
+    </p>
+
+    <figure class="mv-fig" id="mv-pano-types" aria-label="The panorama over time with the two choices of reference">
+      <div class="mv-pano-head">
+        <div class="mv-keys">
+          <span><span class="mv-swatch" style="background:#1D9E75"></span>Video 1</span>
+          <span><span class="mv-swatch" style="background:#D85A30"></span>Video 2</span>
+          <span><span class="mv-swatch" style="background:#7F77DD"></span>Video 3</span>
+        </div>
+        <div class="mv-seg" role="group" aria-label="Panorama reference">
+          <button type="button" data-mode="camera" aria-pressed="true">Video 1 fixed</button>
+          <button type="button" data-mode="scene" aria-pressed="false">Scene fixed</button>
+        </div>
+      </div>
+      <div class="mv-pano"></div>
+      <div class="mv-controls mv-controls-below">
+        <button class="mv-play" type="button" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5v15l12.5-7.5z"/></svg></button>
+        <input class="mv-range" type="range" min="0" max="19" step="0.05" value="0" aria-label="Time">
+        <span class="mv-readout">t = 1</span>
+      </div>
+    </figure>
+    <p class="caption">
+      Video 1 fixed: the other cameras move around it. Scene fixed: the scene stays in place and all three
+      cameras move over it.
+    </p>
+
+    </details>
+
+  </section>
+
+  <section class="band band-green">
+
+    <!-- ============ MMCD Dataset ============ -->
+    <h2 id="mmcd"><span class="rainbow">The MMCD Dataset</span></h2>
+    <p>
+      To our knowledge, no available dataset supports multiple video stitching with
+      <span class="m"><var>N</var>&nbsp;&gt;&nbsp;2</span> freely moving cameras. Thus, we created MMCD, a new
+      multiview dataset. MMCD contains 53 scenes, each with 3&ndash;6 synchronized handheld videos captured on
+      diverse mobile devices under varied environmental and lighting conditions.
+    </p>
+
+    <dl class="stats">
+      <div><dt>Scenes</dt><dd>53</dd></div>
+      <div><dt>Videos</dt><dd>221</dd></div>
+      <div><dt>Frames</dt><dd>47,040</dd></div>
+      <div><dt>Cameras per scene</dt><dd>3&ndash;6</dd></div>
+    </dl>
+
+    <p>
+      To facilitate quantitative evaluation, we manually annotated keypoints in the overlap regions of the first frames and
+      propagated them through the sequences using Co-Tracker3.
+    </p>
+
+    <div class="gallery" data-gallery data-label="MMCD samples">
+      <div class="gallery-stage">
+        <button class="nav-btn prev" type="button" aria-label="Previous video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 4 6.5 10l6 6"/></svg></button>
+        <div class="gallery-viewport">
+          <div class="gallery-slide"><video src="videos/13_mmcd_sample.mp4" muted loop playsinline webkit-playsinline preload="metadata"></video></div>
+          <div class="gallery-slide"><video src="videos/14_mmcd_sample.mp4" muted loop playsinline webkit-playsinline preload="none"></video></div>
+          <div class="gallery-slide"><video src="videos/16_mmcd_sample.mp4" muted loop playsinline webkit-playsinline preload="none"></video></div>
+          <div class="gallery-slide"><video src="videos/17_mmcd_sample.mp4" muted loop playsinline webkit-playsinline preload="none"></video></div>
+          <div class="gallery-slide"><video src="videos/18_mmcd_sample.mp4" muted loop playsinline webkit-playsinline preload="none"></video></div>
+          <div class="gallery-slide">
+            <span class="slide-label">Very high and very low camera motion</span>
+            <video src="videos/15_mmcd_extreme_motion_1.mp4" muted loop playsinline webkit-playsinline preload="none"></video>
+          </div>
+          <div class="gallery-slide">
+            <span class="slide-label">Indoor scene</span>
+            <video src="videos/19_mmcd_indoor_1.mp4" muted loop playsinline webkit-playsinline preload="none"></video>
+          </div>
+          <div class="gallery-slide">
+            <span class="slide-label">Indoor scene</span>
+            <video src="videos/20_mmcd_indoor_2.mp4" muted loop playsinline webkit-playsinline preload="none"></video>
+          </div>
+        </div>
+        <button class="nav-btn next" type="button" aria-label="Next video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4l6 6-6 6"/></svg></button>
+      </div>
+      <div class="gallery-dots"></div>
+    </div>
+
+  </section>
+
+  <section class="band band-cream">
+
+    <!-- ============ The multi-camera benchmark ============ -->
+    <h2 id="benchmark">The Multi-Camera Benchmark</h2>
+    <p>
+      For <span class="m"><var>N</var>&nbsp;&gt;&nbsp;2</span>, no existing video stitching method handles freely moving
+      cameras, so we built a benchmark on the annotated MMCD dataset. It measures cross-view alignment with GV, our new metric (below); stability with the stability score of keypoint
+      trajectories; and temporal smoothness with the mean square acceleration of video-corner trajectories (CMSA).
+    </p>
+
+    <div class="table-wrap">
+      <table class="results">
+        <thead>
+          <tr><th class="method" rowspan="2">Method</th><th colspan="4" class="g"><var>N</var>&nbsp;=&nbsp;3</th><th colspan="4" class="g"><var>N</var>&nbsp;=&nbsp;4</th><th colspan="4" class="g"><var>N</var>&nbsp;=&nbsp;5</th><th colspan="4" class="g"><var>N</var>&nbsp;=&nbsp;6</th></tr>
+          <tr><th class="g">GV</th><th>Stab.</th><th>CMSA</th><th>Succ.</th><th class="g">GV</th><th>Stab.</th><th>CMSA</th><th>Succ.</th><th class="g">GV</th><th>Stab.</th><th>CMSA</th><th>Succ.</th><th class="g">GV</th><th>Stab.</th><th>CMSA</th><th>Succ.</th></tr>
+        </thead>
+        <tbody>
+          <tr class="group"><td colspan="17">Multiple image stitching (MIS)</td></tr>
+          <tr><td class="method">AutoStitch</td><td class="g">3.3</td><td>.847</td><td>635</td><td>14/22</td><td class="g"><b>2.4</b></td><td>.901</td><td>217</td><td>6/10</td><td class="g">3.1</td><td>.834</td><td>&gt;1k</td><td>9/11</td><td class="g">3.3</td><td>.924</td><td>111</td><td>5/10</td></tr>
+          <tr><td class="method">APAP</td><td class="g">2.9</td><td>.850</td><td>&gt;1k</td><td>19/22</td><td class="g">30.3</td><td>.832</td><td>&gt;1k</td><td><b>10/10</b></td><td class="g">2.4</td><td>.846</td><td>&gt;1k</td><td><b>11/11</b></td><td class="g">4.0</td><td>.875</td><td>&gt;1k</td><td>8/10</td></tr>
+          <tr><td class="method">GSP</td><td class="g">2.8</td><td>.648</td><td>&gt;1k</td><td>19/22</td><td class="g">2.5</td><td>.649</td><td>&gt;1k</td><td>9/10</td><td class="g"><b>2.1</b></td><td>.625</td><td>&gt;1k</td><td><b>11/11</b></td><td class="g">3.0</td><td>.672</td><td>&gt;1k</td><td>9/10</td></tr>
+          <tr><td class="method">SPW</td><td class="g">4.8</td><td>.807</td><td>&gt;1k</td><td><b>22/22</b></td><td class="g">10.4</td><td>.716</td><td>&gt;1k</td><td><b>10/10</b></td><td class="g">2.5</td><td>.835</td><td>&gt;1k</td><td>10/11</td><td class="g">14.8</td><td>.745</td><td>&gt;1k</td><td><b>10/10</b></td></tr>
+          <tr><td class="method">GES-GSP</td><td class="g">2.9</td><td>.618</td><td>&gt;1k</td><td>19/22</td><td class="g">2.5</td><td>.668</td><td>&gt;1k</td><td>9/10</td><td class="g">2.4</td><td>.614</td><td>&gt;1k</td><td>10/11</td><td class="g">3.2</td><td>.670</td><td>&gt;1k</td><td>9/10</td></tr>
+          <tr><td class="method">OBJ-GSP</td><td class="g">2.9</td><td>.621</td><td>&gt;1k</td><td>19/22</td><td class="g">2.5</td><td>.634</td><td>&gt;1k</td><td>9/10</td><td class="g">2.2</td><td>.683</td><td>&gt;1k</td><td>8/11</td><td class="g">3.1</td><td>.681</td><td>&gt;1k</td><td>6/10</td></tr>
+          <tr class="group"><td colspan="17">MIS with temporal regularization (TR)</td></tr>
+          <tr><td class="method">GSP+TR</td><td class="g">3.1</td><td>.863</td><td>62.9</td><td>19/22</td><td class="g">2.8</td><td>.898</td><td>52.2</td><td>9/10</td><td class="g">3.2</td><td>.817</td><td>93.6</td><td><b>11/11</b></td><td class="g">3.5</td><td>.879</td><td>38.1</td><td>9/10</td></tr>
+          <tr><td class="method">GES-GSP+TR</td><td class="g">3.3</td><td>.849</td><td>69.4</td><td>19/22</td><td class="g">3.1</td><td>.884</td><td>57.2</td><td>9/10</td><td class="g">3.8</td><td>.800</td><td>100</td><td><b>11/11</b></td><td class="g">3.9</td><td>.866</td><td>39.5</td><td>9/10</td></tr>
+          <tr><td class="method">OBJ-GSP+TR</td><td class="g">3.2</td><td>.853</td><td>75.3</td><td>19/22</td><td class="g">3.0</td><td>.879</td><td>71.6</td><td>9/10</td><td class="g">3.5</td><td>.808</td><td>106</td><td><b>11/11</b></td><td class="g">3.7</td><td>.872</td><td>42.0</td><td>9/10</td></tr>
+          <tr class="group"><td colspan="17">MIS with post-hoc smoothing (PS)</td></tr>
+          <tr><td class="method">GSP+PS</td><td class="g"><b>2.7</b></td><td>.816</td><td>216</td><td>19/22</td><td class="g"><b>2.4</b></td><td>.841</td><td>251</td><td>9/10</td><td class="g"><b>2.1</b></td><td>.783</td><td>577</td><td><b>11/11</b></td><td class="g"><b>2.8</b></td><td>.867</td><td>174</td><td>9/10</td></tr>
+          <tr><td class="method">GES-GSP+PS</td><td class="g">2.8</td><td>.802</td><td>206</td><td>19/22</td><td class="g">2.5</td><td>.853</td><td>154</td><td>9/10</td><td class="g">2.3</td><td>.796</td><td>644</td><td>10/11</td><td class="g">3.0</td><td>.887</td><td>90.7</td><td>9/10</td></tr>
+          <tr><td class="method">OBJ-GSP+PS</td><td class="g">2.8</td><td>.814</td><td>177</td><td>19/22</td><td class="g"><b>2.4</b></td><td>.836</td><td>196</td><td>9/10</td><td class="g"><b>2.1</b></td><td>.822</td><td>73.6</td><td>8/11</td><td class="g">2.9</td><td>.884</td><td>101</td><td>6/10</td></tr>
+          <tr class="group"><td colspan="17">Video stitching</td></tr>
+          <tr><td class="method">StabStitch++</td><td class="g">27.8</td><td>.799</td><td>20.0</td><td><b>22/22</b></td><td class="g">N/A</td><td>N/A</td><td>N/A</td><td>N/A</td><td class="g">N/A</td><td>N/A</td><td>N/A</td><td>N/A</td><td class="g">N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
+          <tr class="ours"><td class="method">MViS (ours)</td><td class="g">3.1</td><td><b>.917</b></td><td><b>2.5</b></td><td><b>22/22</b></td><td class="g">2.8</td><td><b>.925</b></td><td><b>14.2</b></td><td><b>10/10</b></td><td class="g">2.3</td><td><b>.874</b></td><td><b>11.0</b></td><td><b>11/11</b></td><td class="g">3.0</td><td><b>.930</b></td><td><b>2.4</b></td><td><b>10/10</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="caption">
+      The multi-camera benchmark on MMCD; <var>N</var> is the number of videos per scene. Stab. (&uarr;),
+      GV (&darr;) and CMSA (&darr;) are averaged over the scenes on which each method succeeded without collapsing,
+      counted in Succ.; the best values are in bold. StabStitch++&rsquo;s high GV on
+      <span class="m"><var>N</var>&nbsp;=&nbsp;3</span> reflects severe misalignment in scenes where its assumed camera
+      ordering is violated; its code does not support <span class="m"><var>N</var>&nbsp;&gt;&nbsp;3</span>.
+    </p>
+
+    <!-- ============ The GV metric ============ -->
+    <h2 id="gv">The Geometric Variance Metric (GV)</h2>
+    <p>
+      GV measures cross-view alignment with the annotated keypoints. At each time <var>t</var>, every keypoint visible
+      in all videos is mapped into the panorama by each video&rsquo;s transformation <var>T</var><sup><var>t</var>,<var>i</var></sup>.
+      GV is computed from the variance of these copies, averaged over keypoints and frames and scaled to the frame
+      size. Lower is better: perfectly aligned views give <span class="mv-nw">GV&nbsp;=&nbsp;0</span>.
+    </p>
+
+    <figure class="mv-fig" id="mv-gv" aria-label="One keypoint on the mountain top, seen in three frames at time t; in the panorama its three copies coincide when the frames are aligned, giving GV = 0, and spread apart when they are not, giving GV above 0">
+      <div class="mv-sub">Frames at time <var>t</var>, with the same keypoint annotated in each</div>
+      <div class="mv-gv-frames"></div>
+      <div class="mv-gv-main">
+        <div>
+          <div class="mv-sub">Panorama: the keypoint&rsquo;s copies, mapped by <var>T</var><sup><var>t</var>,<var>i</var></sup></div>
+          <div class="mv-gv-pano"></div>
+        </div>
+        <div>
+          <div class="mv-sub">Zoom on the keypoint</div>
+          <div class="mv-gv-zoom"></div>
+          <div class="mv-gv-value" aria-live="off">GV = 0.0</div>
+          <div class="mv-gv-state"><span class="is-on">Aligned: one sharp scene</span><span>Misaligned: ghosting, copies spread</span></div>
+        </div>
+      </div>
+    </figure>
+    <p class="note">
+      Note: GV needs no distance threshold and evaluates all views together in a shared space. We believe it
+      is a more informative alternative to PCK (Percentage of Correct Keypoints) for any task that aligns multiple
+      images into a common frame.
+    </p>
+
+    <!-- ============ More visual results ============ -->
+    <h2 id="more-results">More Visual Results of MViS</h2>
+    <div class="gallery is-wide" data-gallery data-label="MViS results">
+      <div class="gallery-stage">
+        <button class="nav-btn prev" type="button" aria-label="Previous video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 4 6.5 10l6 6"/></svg></button>
+        <div class="gallery-viewport">
+          <div class="gallery-slide">
+            <span class="slide-label"><var>N</var>&nbsp;=&nbsp;6</span>
+            <video src="videos/22_n6_fast_slow_mvis.mp4" muted loop playsinline webkit-playsinline preload="metadata"></video>
+          </div>
+          <div class="gallery-slide">
+            <span class="slide-label"><var>N</var>&nbsp;=&nbsp;5</span>
+            <video src="videos/9_n5_mvis.mp4" muted loop playsinline webkit-playsinline preload="none"></video>
+          </div>
+          <div class="gallery-slide">
+            <span class="slide-label"><var>N</var>&nbsp;=&nbsp;4</span>
+            <video src="videos/20_n4_indoor_mvis.mp4" muted loop playsinline webkit-playsinline preload="none"></video>
+          </div>
+          <div class="gallery-slide">
+            <span class="slide-label"><var>N</var>&nbsp;=&nbsp;3</span>
+            <video src="videos/21_n3_mvis.mp4" muted loop playsinline webkit-playsinline preload="none"></video>
+          </div>
+          <div class="gallery-slide">
+            <span class="slide-label"><var>N</var>&nbsp;=&nbsp;5</span>
+            <video src="videos/23_n5_fast_slow_mvis.mp4" muted loop playsinline webkit-playsinline preload="none"></video>
+          </div>
+        </div>
+        <button class="nav-btn next" type="button" aria-label="Next video"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4l6 6-6 6"/></svg></button>
+      </div>
+      <div class="gallery-dots"></div>
+    </div>
+    <p class="caption">MViS outputs for scenes with varying numbers of cameras, all from the MMCD dataset.</p>
+
+
+    <!-- ============ Citation ============ -->
+    <h2 id="citation">BibTeX</h2>
+    <p class="cite-note">If you find MViS, the MMCD dataset, the Multi-Camera Benchmark, or the GV metric useful in your research, please cite:</p>
+    <div class="bibtex">
+      <button class="copy-btn" type="button" id="copy-bibtex">Copy</button>
+<pre id="bibtex-text">@inproceedings{Ifergane:NeurIPS:2026:MViS,
+  title     = {Video Stitching from Multiple Moving Cameras},
+  author    = {Ifergane, Shira and Amoyal, Roy and Benishay, Shahar and Freifeld, Oren},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2026}
+}</pre>
+    </div>
+
+  </section>
+</main>
+<footer class="site-footer">Website &copy; 2026 Shira Ifergane. All rights reserved.</footer>
+
+<script>
+/*
+ * Video carousels.
+ * Written in plain ES5 so it runs in every current browser (Safari on macOS and iOS, Chrome, Edge, Firefox).
+ * Only the visible slide of an on-screen carousel plays; everything else is paused to save bandwidth and battery.
+ * A carousel with several videos plays through them on its own: each video plays once, then the next slides in,
+ * and after the last one it starts over from the first.
+ */
+(function () {
+  'use strict';
+
+  var DURATION = 450;
+  var EASE = 'cubic-bezier(0.4, 0, 0.2, 1)';
+  var motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var PLAY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5v15l12.5-7.5z"/></svg>';
+  var galleries = [];
+
+  function reducedMotion() { return !!(motionQuery && motionQuery.matches); }
+  function toArray(list) { return Array.prototype.slice.call(list); }
+  function videoOf(slide) { return slide ? slide.querySelector('video') : null; }
+
+  function showMissing(video) {
+    if (!video || video._missing) return;
+    video._missing = true;
+    var slide = video.parentNode;
+    if (slide._missingBox) slide._missingBox.hidden = false;
+    if (slide._tapButton) slide._tapButton.hidden = true;
+  }
+
+  function playVideo(video) {
+    if (!video || video._missing) return;
+    video.muted = true; // Safari and Chrome only autoplay muted video
+    var promise;
+    try { promise = video.play(); } catch (e) { return; }
+    if (promise && typeof promise.then === 'function') {
+      promise.then(null, function (err) {
+        if (video.error) { showMissing(video); return; }
+        // Autoplay refused (e.g. iOS Low Power Mode): offer a play button instead
+        if (err && err.name === 'NotAllowedError' && video.parentNode._tapButton) {
+          video.parentNode._tapButton.hidden = false;
+        }
+      });
+    }
+  }
+
+  function pauseVideo(video) {
+    if (video && !video.paused) { try { video.pause(); } catch (e) {} }
+  }
+
+  function decorateSlide(slide) {
+    var video = videoOf(slide);
+    if (!video) return;
+
+    var box = document.createElement('div');
+    box.className = 'video-missing';
+    box.hidden = true;
+    var msg = document.createElement('span');
+    msg.textContent = 'Video not available';
+    var path = document.createElement('code');
+    path.textContent = video.getAttribute('src') || '';
+    box.appendChild(msg);
+    box.appendChild(path);
+    slide.appendChild(box);
+    slide._missingBox = box;
+
+    var tap = document.createElement('button');
+    tap.type = 'button';
+    tap.className = 'tap-play';
+    tap.setAttribute('aria-label', 'Play video');
+    tap.innerHTML = PLAY_ICON;
+    tap.hidden = true;
+    tap.addEventListener('click', function () { playVideo(video); });
+    slide.appendChild(tap);
+    slide._tapButton = tap;
+
+    video.addEventListener('error', function () { showMissing(video); });
+    video.addEventListener('playing', function () { tap.hidden = true; });
+    if (video.error) showMissing(video); // only a real load or decode error, never the in-between state Safari reports while choosing a source
+  }
+
+  var SKIP_MS = 5000; // how long a carousel waits on a slide whose video failed to load
+
+  // a video that can't load would stop the autoplay, so move on after a short wait
+  function armSkip(g) {
+    if (g.skipT) { window.clearTimeout(g.skipT); g.skipT = 0; }
+    if (g.slides.length < 2 || !g.visible || document.hidden) return;
+    var v = videoOf(g.slides[g.cur]);
+    if (v && !v._missing) return;
+    g.skipT = window.setTimeout(function () { g.skipT = 0; go(g, g.cur + 1, 1); }, SKIP_MS);
+  }
+
+  function sync(g) {
+    g.slides.forEach(function (slide, i) {
+      var v = videoOf(slide);
+      if (i === g.cur && g.visible && !document.hidden) playVideo(v);
+      else pauseVideo(v);
+    });
+    if (g.skipT !== undefined) armSkip(g);
+  }
+
+  function updateDots(g) {
+    g.dots.forEach(function (d, i) {
+      var on = i === g.cur;
+      if (on) { d.classList.add('active'); d.setAttribute('aria-current', 'true'); }
+      else { d.classList.remove('active'); d.removeAttribute('aria-current'); }
+    });
+  }
+
+  function go(g, to, dir) {
+    var n = g.slides.length;
+    to = ((to % n) + n) % n;
+    if (g.busy || to === g.cur) return;
+
+    var from = g.slides[g.cur];
+    var target = g.slides[to];
+    var ms = reducedMotion() ? 0 : DURATION;
+    var tv = videoOf(target);
+    g.busy = true;
+
+    if (tv && !tv._missing) { try { tv.currentTime = 0; } catch (e) {} }
+
+    // park the incoming slide just outside the viewport, then slide both
+    target.style.transition = 'none';
+    target.style.transform = 'translate3d(' + (dir * 100) + '%,0,0)';
+    target.classList.add('is-moving');
+    void target.offsetWidth; // force layout so the next change animates
+
+    var t = ms ? 'transform ' + ms + 'ms ' + EASE : 'none';
+    target.style.transition = t;
+    from.style.transition = t;
+    target.style.transform = 'translate3d(0,0,0)';
+    from.style.transform = 'translate3d(' + (-dir * 100) + '%,0,0)';
+
+    g.cur = to;
+    from.setAttribute('aria-hidden', 'true');
+    target.setAttribute('aria-hidden', 'false');
+    updateDots(g);
+    if (g.visible && !document.hidden) playVideo(tv);
+
+    // a timer (not transitionend) so the carousel never gets stuck if an event is missed
+    window.setTimeout(function () {
+      from.classList.remove('is-active');
+      target.classList.add('is-active');
+      target.classList.remove('is-moving');
+      from.style.transition = '';
+      target.style.transition = '';
+      from.style.transform = '';
+      target.style.transform = '';
+      pauseVideo(videoOf(from));
+      g.busy = false;
+      armSkip(g);
+    }, ms + 30);
+  }
+
+  function initGallery(el) {
+    var viewport = el.querySelector('.gallery-viewport');
+    var slides = toArray(el.querySelectorAll('.gallery-slide'));
+    var prevBtn = el.querySelector('.nav-btn.prev');
+    var nextBtn = el.querySelector('.nav-btn.next');
+    var dotsBox = el.querySelector('.gallery-dots');
+    var n = slides.length;
+    var g = { el: el, slides: slides, cur: 0, busy: false, visible: true, dots: [] };
+    if (!n) return;
+    el._gallery = g;
+    galleries.push(g);
+
+    viewport.setAttribute('role', 'group');
+    viewport.setAttribute('aria-roledescription', 'carousel');
+    viewport.setAttribute('aria-label', el.getAttribute('data-label') || 'Videos');
+
+    slides.forEach(function (slide, i) {
+      if (i === 0) slide.classList.add('is-active');
+      slide.setAttribute('role', 'group');
+      slide.setAttribute('aria-roledescription', 'slide');
+      slide.setAttribute('aria-label', (i + 1) + ' of ' + n);
+      slide.setAttribute('aria-hidden', i === 0 ? 'false' : 'true');
+      decorateSlide(slide);
+    });
+
+    if (n < 2) {
+      el.classList.add('is-single');
+      if (prevBtn) prevBtn.hidden = true;
+      if (nextBtn) nextBtn.hidden = true;
+      if (dotsBox) dotsBox.hidden = true;
+      return;
+    }
+
+    for (var k = 0; k < n; k++) {
+      (function (k) {
+        var d = document.createElement('button');
+        d.type = 'button';
+        d.className = 'dot';
+        d.setAttribute('aria-label', 'Show video ' + (k + 1) + ' of ' + n);
+        d.addEventListener('click', function () {
+          if (k !== g.cur) go(g, k, k > g.cur ? 1 : -1);
+        });
+        dotsBox.appendChild(d);
+        g.dots.push(d);
+      })(k);
+    }
+    updateDots(g);
+
+    // autoplay through the carousel: each video plays once, then the next one slides in; the last wraps to the first
+    g.skipT = 0;
+    slides.forEach(function (slide, i) {
+      var v = videoOf(slide);
+      if (!v) return;
+      v.loop = false;
+      v.removeAttribute('loop');
+      v.addEventListener('ended', function next() {
+        if (i !== g.cur) return;
+        if (g.busy) { window.setTimeout(next, DURATION + 60); return; }   // mid-slide: try again once it settles
+        go(g, g.cur + 1, 1);
+      });
+      v.addEventListener('error', function () { if (i === g.cur) armSkip(g); });
+    });
+
+    prevBtn.addEventListener('click', function () { go(g, g.cur - 1, -1); });
+    nextBtn.addEventListener('click', function () { go(g, g.cur + 1, 1); });
+
+    // keyboard arrows when the carousel has focus
+    viewport.setAttribute('tabindex', '0');
+    viewport.addEventListener('keydown', function (e) {
+      var key = e.key || e.keyCode;
+      if (key === 'ArrowLeft' || key === 'Left' || key === 37) { e.preventDefault(); go(g, g.cur - 1, -1); }
+      else if (key === 'ArrowRight' || key === 'Right' || key === 39) { e.preventDefault(); go(g, g.cur + 1, 1); }
+    });
+
+    // swipe on phones and tablets
+    var startX = 0, startY = 0, tracking = false;
+    viewport.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { tracking = false; return; }
+      tracking = true;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }, { passive: true });
+    viewport.addEventListener('touchend', function (e) {
+      if (!tracking) return;
+      tracking = false;
+      var t = e.changedTouches[0];
+      var dx = t.clientX - startX;
+      var dy = t.clientY - startY;
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        if (dx < 0) go(g, g.cur + 1, 1); else go(g, g.cur - 1, -1);
+      }
+    }, { passive: true });
+  }
+
+  toArray(document.querySelectorAll('[data-gallery]')).forEach(initGallery);
+
+  // background video on the first screen: pause it when scrolled away
+  var hero = document.querySelector('.hero');
+  var heroVideo = hero ? hero.querySelector('.hero-video') : null;
+  if (heroVideo) {
+    playVideo(heroVideo);
+    var heroG = { el: hero, slides: [hero], cur: 0, busy: false, visible: true, dots: [] };
+    hero._gallery = heroG;
+    galleries.push(heroG);
+  }
+
+  // play only carousels that are on screen
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var g = entry.target._gallery;
+        if (!g) return;
+        g.visible = entry.isIntersecting;
+        sync(g);
+      });
+    }, { rootMargin: '120px 0px', threshold: 0 });
+    galleries.forEach(function (g) { g.visible = false; io.observe(g.el); });
+  } else {
+    galleries.forEach(sync);
+  }
+
+  document.addEventListener('visibilitychange', function () { galleries.forEach(sync); });
+
+  // if the browser blocked autoplay, any tap or click on the page starts the on-screen videos (a tap counts as permission)
+  function kick() {
+    galleries.forEach(function (g) {
+      if (!g.visible) return;
+      var v = videoOf(g.slides[g.cur]);
+      if (v && v.paused && !v._missing) playVideo(v);
+    });
+  }
+  document.addEventListener('click', kick, true);
+  document.addEventListener('touchend', kick, { capture: true, passive: true });
+
+  // watchdog, once a second: restarts an on-screen video that stopped on its own, and moves a carousel on when its
+  // video has reached the end but the browser never fired "ended" (Safari does this with some encodings)
+  window.setInterval(function () {
+    if (document.hidden) return;
+    galleries.forEach(function (g) {
+      if (!g.visible || g.busy) { g.stuck = 0; return; }
+      var v = videoOf(g.slides[g.cur]) || (g.el.querySelector ? g.el.querySelector('video') : null);
+      if (!v || v._missing) return;
+      var multi = g.skipT !== undefined;
+      var t = v.currentTime, d = v.duration;
+      var atEnd = v.ended || (isFinite(d) && d > 0 && t >= d - 0.35);
+      if (multi && atEnd) {
+        g.stuck = (t === g.lastT || v.ended) ? (g.stuck || 0) + 1 : 0;
+        if (v.ended || g.stuck >= 2) { g.stuck = 0; go(g, g.cur + 1, 1); }
+      } else if (v.paused && v.readyState >= 2 && !(v.parentNode._tapButton && !v.parentNode._tapButton.hidden)) {
+        playVideo(v);
+      }
+      g.lastT = t;
+    });
+  }, 1000);
+
+  // the top bar: shown once the hero is scrolled away; the link of the section on screen is marked
+  var topbar = document.getElementById('topbar');
+  if (topbar && hero) {
+    var links = toArray(topbar.querySelectorAll('.topbar-links a'));
+    // sections in page order; the visual results section has no link, so nothing is marked there
+    var marks = ['background', 'mvis', 'mmcd', 'benchmark', 'gv', 'more-results', 'citation'].map(function (id) {
+      return { el: document.getElementById(id), link: topbar.querySelector('a[href="#' + id + '"]') };
+    }).filter(function (m) { return m.el; });
+    var pending = false;
+    var updateBar = function () {
+      pending = false;
+      var shown = hero.getBoundingClientRect().bottom <= 60;
+      if (shown) topbar.classList.add('is-shown'); else topbar.classList.remove('is-shown');
+      var line = Math.min(160, window.innerHeight * 0.35), current = null;
+      marks.forEach(function (m) { if (m.el.getBoundingClientRect().top <= line) current = m.link; });
+      // at the very bottom, the last section counts as reached
+      if (window.innerHeight + window.pageYOffset >= document.documentElement.scrollHeight - 4) current = marks[marks.length - 1].link;
+      links.forEach(function (a) {
+        if (a === current) { a.classList.add('is-active'); a.setAttribute('aria-current', 'location'); }
+        else { a.classList.remove('is-active'); a.removeAttribute('aria-current'); }
+      });
+    };
+    window.addEventListener('scroll', function () {
+      if (!pending) { pending = true; window.requestAnimationFrame(updateBar); }
+    }, { passive: true });
+    window.addEventListener('resize', updateBar);
+    updateBar();
+  }
+
+  // contributions: underline the key phrases one after another each time the list comes into view;
+  // once it is fully out of view, the underlines reset so the next visit plays them again
+  var contrib = document.querySelector('.contributions');
+  var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (contrib && 'IntersectionObserver' in window && !calm) {
+    contrib.classList.add('ul-wait');
+    new IntersectionObserver(function (entries) {
+      var e = entries[0];
+      if (e.intersectionRatio >= 0.6) {
+        if (!contrib.classList.contains('ul-wait')) return;
+        contrib.classList.add('ul-go');
+        void contrib.offsetWidth; // start from the hidden state so the transition runs
+        contrib.classList.remove('ul-wait');
+      } else if (!e.isIntersecting) {
+        contrib.classList.remove('ul-go');
+        contrib.classList.add('ul-wait');
+      }
+    }, { threshold: [0, 0.6] }).observe(contrib);
+  }
+
+  // sections come in as the reader reaches them; blocks already on screen at load are shown at once
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if ('IntersectionObserver' in window && !reduceMotion) {
+    var blocks = toArray(document.querySelectorAll('main .band > *:not(script):not(svg)'));
+    var fold = window.innerHeight;
+    document.documentElement.classList.add('reveal-on');
+    var revealer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('is-in'); revealer.unobserve(en.target); }
+      });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    blocks.forEach(function (el) {
+      el.classList.add('rv');
+      if (el.getBoundingClientRect().top < fold) el.classList.add('is-in'); else revealer.observe(el);
+    });
+  }
+
+  var copyBtn = document.getElementById('copy-bibtex');
+  var bib = document.getElementById('bibtex-text');
+  if (copyBtn && bib) {
+    copyBtn.addEventListener('click', function () {
+      var text = bib.textContent;
+      function done(ok) {
+        copyBtn.textContent = ok ? 'Copied' : 'Select and copy';
+        window.setTimeout(function () { copyBtn.textContent = 'Copy'; }, 1800);
+      }
+      function fallback() {
+        var range = document.createRange();
+        range.selectNodeContents(bib);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        done(ok);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+      } else {
+        fallback();
+      }
+    });
+  }
+})();
+</script>
+
+<script>
+/*
+ * Method figures (section "Multiple Video Stitching"): the intro figure, Stage 1, Stage 2 and the panorama references.
+ * Schematic illustrations on a synthetic scene of three moving cameras: every frame is a view of one vector drawing
+ * (#mv-world-back, a drifting balloon, a walking cat, #mv-world-front) through a camera transform, so all warps
+ * below are exact.
+ * Time u is measured in frames and may be fractional, which the animations use for smooth playback.
+ * Plain ES5, like the script above.
+ */
+(function () {
+  'use strict';
+
+  var W = 168, H = 96, N = 20, DEG = Math.PI / 180;
+  var CORNERS = [[0, 0], [W, 0], [W, H], [0, H]];
+  var FRAME_BOX = [0, 0, W, H];
+  var CAM_COLOR = ['#1D9E75', '#D85A30', '#7F77DD'];
+  var TINT = [null, 'rgba(255,186,100,0.13)', 'rgba(60,100,190,0.13)']; // per-camera exposure
+  var MV_COLOR = '#378ADD', TP_COLOR = '#E24B4A';
+  var PLAY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5v15l12.5-7.5z"/></svg>';
+  var PAUSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 4.5h4v15H6zM14 4.5h4v15h-4z"/></svg>';
+  var RATE = 4; // playback speed of the animations, frames per second
+
+  // 2D maps stored as SVG matrix(a b c d e f): (x, y) -> (a x + c y + e, b x + d y + f)
+  function cam(cx, cy, s, r) {
+    var k = 1 / s, c = Math.cos(r * DEG), n = Math.sin(r * DEG);
+    var a = k * c, b = -k * n, cc = k * n, d = k * c;
+    return [a, b, cc, d, W / 2 - (a * cx + cc * cy), H / 2 - (b * cx + d * cy)];
+  }
+  function apply(M, p) { return [M[0] * p[0] + M[2] * p[1] + M[4], M[1] * p[0] + M[3] * p[1] + M[5]]; }
+  function invert(M) {
+    var t = M[0] * M[3] - M[1] * M[2], a = M[3] / t, b = -M[1] / t, c = -M[2] / t, d = M[0] / t;
+    return [a, b, c, d, -(a * M[4] + c * M[5]), -(b * M[4] + d * M[5])];
+  }
+  function compose(M, Q) { // M after Q
+    return [M[0] * Q[0] + M[2] * Q[1], M[1] * Q[0] + M[3] * Q[1], M[0] * Q[2] + M[2] * Q[3], M[1] * Q[2] + M[3] * Q[3],
+            M[0] * Q[4] + M[2] * Q[5] + M[4], M[1] * Q[4] + M[3] * Q[5] + M[5]];
+  }
+  function f2(v) { return v.toFixed(2); }
+  function matrixAttr(M) { return 'matrix(' + M.map(function (v) { return v.toFixed(4); }).join(' ') + ')'; }
+  function polygon(M) { return CORNERS.map(function (c) { var q = apply(M, c); return f2(q[0]) + ',' + f2(q[1]); }).join(' '); }
+  function bounds(points, pad, aspect) {
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    points.forEach(function (p) {
+      x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]);
+    });
+    var x = x0 - pad, y = y0 - pad, w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
+    if (aspect) {
+      if (w / h < aspect) { x -= (aspect * h - w) / 2; w = aspect * h; } else { y -= (w / aspect - h) / 2; h = w / aspect; }
+    }
+    return [x, y, w, h];
+  }
+  function viewBox(b) { return b.map(f2).join(' '); }
+  function rect(b, fill) {
+    return '<rect x="' + f2(b[0]) + '" y="' + f2(b[1]) + '" width="' + f2(b[2]) + '" height="' + f2(b[3]) + '" fill="' + fill + '"/>';
+  }
+  function frame(M, tint, u) {
+    return '<g clip-path="url(#mv-clip)">' + rect(FRAME_BOX, '#000') + '<g transform="' + matrixAttr(M) + '">' + world(u) + '</g>' +
+      (tint ? rect(FRAME_BOX, tint) : '') + '</g>';
+  }
+  // a similarity a fraction l of the way from the identity (l = 0) to the similarity M (l = 1), about the frame center
+  function partial(M, l) {
+    var s = Math.sqrt(M[0] * M[0] + M[1] * M[1]), th = Math.atan2(M[1], M[0]), c = apply(M, [W / 2, H / 2]);
+    var dx = c[0] - W / 2, dy = c[1] - H / 2, sl = Math.pow(s, l), a = sl * Math.cos(th * l), b = sl * Math.sin(th * l);
+    return [a, b, -b, a, W / 2 - (a * W / 2 - b * H / 2) + l * dx, H / 2 - (b * W / 2 + a * H / 2) + l * dy];
+  }
+  function frameSvg(inner) { return '<svg class="mv-img" viewBox="0 0 168 96" aria-hidden="true">' + inner + '</svg>'; }
+  function rng(seed) { // small deterministic generator, values in [-0.5, 0.5)
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296 - 0.5;
+    };
+  }
+  function playIcon(button, playing) {
+    button.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
+    button.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  }
+  // a figure that plays on its own while on screen: step(dt) advances it by dt seconds. Pausing, or scrubbing
+  // (stop), keeps it still until play is pressed again; with reduced motion it plays only on request.
+  var MOTION = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  function autoPlayer(root, button, step) {
+    var raf = null, last = null, visible = false, userPaused = false;
+    function tick(now) {
+      var dt = last === null ? 0 : Math.min(0.1, (now - last) / 1000);
+      last = now;
+      step(dt);
+      raf = window.requestAnimationFrame(tick);
+    }
+    function start() {
+      if (raf === null) { last = null; raf = window.requestAnimationFrame(tick); }
+      playIcon(button, true);
+    }
+    function halt() {
+      if (raf !== null) { window.cancelAnimationFrame(raf); raf = null; }
+      playIcon(button, false);
+    }
+    function sync() {
+      if (visible && !document.hidden && !userPaused && !(MOTION && MOTION.matches)) start(); else halt();
+    }
+    button.addEventListener('click', function () {
+      if (raf !== null) { userPaused = true; halt(); } else { userPaused = false; start(); }
+    });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) { visible = entries[0].isIntersecting; sync(); }, { threshold: 0.2 }).observe(root);
+    }
+    document.addEventListener('visibilitychange', sync);
+    return { stop: function () { userPaused = true; halt(); } };
+  }
+
+  /* ---------- The scene over time ---------- */
+  function useRef(id) { return '<use href="#' + id + '" xlink:href="#' + id + '"/>'; }
+
+  // a white-grey cat walks in from the left behind the fence, then turns up to the red house's door (world coordinates)
+  var CAT_ARRIVE = 17;                                     // frame at which it reaches the door
+  var CAT_LINE = [[215, 297], [500, 297]];                 // along the fence
+  var CAT_CURVE = [[500, 297], [572, 297], [602, 243]];    // quadratic curve up to the door
+  var CAT_STRIDE = 26;                                     // distance per gait cycle
+  var CAT_TABLE = (function () {                           // arc length along the curve
+    var out = [[0, 0]], prev = CAT_CURVE[0], len = 0;
+    for (var n = 1; n <= 64; n++) {
+      var q = bezier(n / 64);
+      len += Math.sqrt((q[0] - prev[0]) * (q[0] - prev[0]) + (q[1] - prev[1]) * (q[1] - prev[1]));
+      out.push([n / 64, len]);
+      prev = q;
+    }
+    return out;
+  })();
+  var CAT_LEN = (CAT_LINE[1][0] - CAT_LINE[0][0]) + CAT_TABLE[64][1];
+  function bezier(v) {
+    var P = CAT_CURVE, a = (1 - v) * (1 - v), b = 2 * (1 - v) * v, c = v * v;
+    return [a * P[0][0] + b * P[1][0] + c * P[2][0], a * P[0][1] + b * P[1][1] + c * P[2][1]];
+  }
+  function catPoint(d) {
+    var straight = CAT_LINE[1][0] - CAT_LINE[0][0];
+    if (d <= straight) return [CAT_LINE[0][0] + d, CAT_LINE[0][1]];
+    d -= straight;
+    for (var n = 1; n <= 64; n++) {
+      if (CAT_TABLE[n][1] >= d) {
+        var a = CAT_TABLE[n - 1], b = CAT_TABLE[n];
+        return bezier(a[0] + (b[0] - a[0]) * (d - a[1]) / (b[1] - a[1]));
+      }
+    }
+    return CAT_CURVE[2];
+  }
+  // constant speed, slowing to a stop over the last fifth of the walk
+  function catState(u) {
+    var x = Math.max(0, Math.min(1, u / CAT_ARRIVE)), k = 1 / 0.9;
+    var f = x <= 0.8 ? k * x : k * (x - (x - 0.8) * (x - 0.8) / 0.4);
+    var speed = x <= 0.8 ? 1 : (1 - x) / 0.2;
+    var d = f * CAT_LEN, p = catPoint(d);
+    return { x: p[0], y: p[1], s: 0.85 + 0.45 * (p[1] - 243) / 54, phase: 2 * Math.PI * d / CAT_STRIDE, swing: 0.5 * speed };
+  }
+  // legs as [hip x, phase offset, color]; diagonal legs move together (far front with near back, and so on)
+  var CAT_LEGS = [[6, Math.PI, '#C9C9C4'], [-6, 0, '#C9C9C4'], [6, 0, '#E4E4E0'], [-6, Math.PI, '#E4E4E0']];
+  var LEG_TOP = -6, LEG_LEN = 6;
+  function legEnd(st, leg) {
+    var th = st.swing * Math.sin(st.phase + leg[1]);
+    return [leg[0] + LEG_LEN * Math.sin(th), LEG_TOP + LEG_LEN * Math.cos(th)];
+  }
+  function catTransform(st) { return 'translate(' + f2(st.x) + ' ' + f2(st.y) + ') scale(' + st.s.toFixed(3) + ')'; }
+  function catMarkup(u) {
+    var st = catState(u);
+    function leg(n) {
+      var e = legEnd(st, CAT_LEGS[n]);
+      var at = '<line x1="' + CAT_LEGS[n][0] + '" y1="' + LEG_TOP + '" x2="' + f2(e[0]) + '" y2="' + f2(e[1]) + '" stroke-linecap="round" stroke=';
+      return at + '"#6f6f6a" stroke-width="3.1"/>' + at + '"' + CAT_LEGS[n][2] + '" stroke-width="2"/>';
+    }
+    return '<g class="mv-cat" transform="' + catTransform(st) + '">' + leg(0) + leg(1) + useRef('mv-cat-body') + leg(2) + leg(3) + '</g>';
+  }
+  function setCat(g, u) {
+    var st = catState(u);
+    if (!g._legs) g._legs = Array.prototype.slice.call(g.querySelectorAll('line'));
+    g.setAttribute('transform', catTransform(st));
+    g._legs.forEach(function (line, n) { // two lines per leg: outline, then fur
+      var e = legEnd(st, CAT_LEGS[n >> 1]);
+      line.setAttribute('x2', f2(e[0]));
+      line.setAttribute('y2', f2(e[1]));
+    });
+  }
+  // the hot-air balloon drifts right and slowly rises, bobbing a little (world coordinates)
+  function balloonTransform(u) {
+    return 'translate(' + f2(500 + 6.2 * u) + ' ' + f2(128 - 1.5 * u + 1.5 * Math.sin(0.5 * u)) + ')';
+  }
+  // the scene at time u
+  function world(u) {
+    return useRef('mv-world-back') + '<g class="mv-balloon" transform="' + balloonTransform(u) + '">' + useRef('mv-balloon-body') + '</g>' +
+      catMarkup(u) + useRef('mv-world-front');
+  }
+  // move the balloon and the cat of a scene instance (an element containing world()) to time u
+  function setWorld(el, u) {
+    if (!el._cat) { el._cat = el.querySelector('.mv-cat'); el._balloon = el.querySelector('.mv-balloon'); }
+    setCat(el._cat, u);
+    el._balloon.setAttribute('transform', balloonTransform(u));
+  }
+
+  // handheld shake: a few fast oscillations with unrelated phases, in [-1.05, 1.05]
+  function shake(u, a, b, c) { return 0.55 * Math.sin(2.3 * u + a) + 0.3 * Math.sin(3.7 * u + b) + 0.2 * Math.sin(5.9 * u + c); }
+  // camera i at time u (world -> frame): pan, tilt, roll and zoom, plus handheld shake
+  function cameraAt(i, u) {
+    var S = Math.sin, C = Math.cos;
+    if (i === 0) {
+      return cam(430 + 3.2 * u + 6 * S(0.5 * u) + 4 * shake(u, 0, 1, 2), 176 + 8 * S(0.45 * u + 0.5) + 3.5 * shake(u, 3, 4, 5),
+        2.1 - 0.006 * u + 0.03 * S(0.6 * u), -4 + 0.35 * u + 1.5 * S(0.55 * u) + 0.8 * shake(u, 6, 7, 8));
+    }
+    if (i === 1) {
+      return cam(600 - 4.2 * u + 6 * S(0.45 * u + 1) + 4 * shake(u, 1.5, 2.5, 3.5), 158 + 1.4 * u + 6 * S(0.5 * u) + 3.5 * shake(u, 4.5, 5.5, 0.5),
+        2 + 0.008 * u, 6 - 0.45 * u + 1.5 * S(0.5 * u + 2) + 0.8 * shake(u, 2, 0, 1));
+    }
+    return cam(335 + 4.4 * u + 5 * S(0.4 * u + 2) + 4 * shake(u, 2, 3, 1), 198 - 1.1 * u + 6 * C(0.42 * u) + 3.5 * shake(u, 5, 1, 4),
+      2.3 + 0.03 * S(0.5 * u), -7 + 0.5 * u + 1.4 * S(0.47 * u) + 0.8 * shake(u, 3, 6, 2));
+  }
+  var CAMS = [0, 1, 2].map(function (i) { var list = []; for (var t = 0; t < N; t++) list.push(cameraAt(i, t)); return list; });
+  // the exact solution, frame -> panorama, with video 1 at the first time as reference
+  function solution(i, t) { return compose(CAMS[0][0], invert(CAMS[i][t])); }
+
+  /* ---------- Panorama rendering, shared by the intro figure and the last figure ---------- */
+  // reference 'camera': video 1 at each time u; reference 'scene': video 1 at the first time
+  function reference(mode, u) { return mode === 'camera' ? cameraAt(0, u) : CAMS[0][0]; }
+  var PANO_BOUNDS = {};
+  ['camera', 'scene'].forEach(function (mode) {
+    var pts = [];
+    for (var u = 0; u <= N - 1 + 1e-9; u += 0.1) {
+      for (var i = 0; i < 3; i++) {
+        var P = compose(reference(mode, u), invert(cameraAt(i, u)));
+        CORNERS.forEach(function (c) { pts.push(apply(P, c)); });
+      }
+    }
+    PANO_BOUNDS[mode] = bounds(pts, 4);
+  });
+  // a panorama built once; attach() returns update(mode, u), which only changes attributes
+  function makePano(id, withOutlines) {
+    var s = '<g data-pano="' + id + '"><rect data-fit="1" fill="#000"/>', outlines = '';
+    [2, 1, 0].forEach(function (i) {
+      s += '<defs><clipPath id="' + id + i + '"><polygon data-clip="' + i + '" points="0,0"/></clipPath></defs>' +
+        '<g clip-path="url(#' + id + i + ')"><g data-view="' + i + '">' + world(0) + '</g>' +
+        (TINT[i] ? '<rect data-fit="1" fill="' + TINT[i] + '"/>' : '') + '</g>';
+      if (withOutlines) outlines += '<polygon data-outline="' + i + '" points="0,0" fill="none" stroke="' + CAM_COLOR[i] + '"/>';
+    });
+    return {
+      markup: s + outlines + '</g>',
+      attach: function (container) {
+        var g = container.querySelector('[data-pano="' + id + '"]'), lastMode = null;
+        function all(sel) { return Array.prototype.slice.call(g.querySelectorAll(sel)); }
+        function byIndex(attr) {
+          var out = [];
+          all('[' + attr + ']').forEach(function (el) { out[+el.getAttribute(attr)] = el; });
+          return out;
+        }
+        var fits = all('[data-fit]'), clips = byIndex('data-clip'), views = byIndex('data-view'), edges = byIndex('data-outline');
+        return function update(mode, u) {
+          var R = reference(mode, u), Rattr = matrixAttr(R), b = PANO_BOUNDS[mode];
+          if (mode !== lastMode) {
+            lastMode = mode;
+            fits.forEach(function (r) {
+              r.setAttribute('x', f2(b[0])); r.setAttribute('y', f2(b[1]));
+              r.setAttribute('width', f2(b[2])); r.setAttribute('height', f2(b[3]));
+            });
+            edges.forEach(function (e) { e.setAttribute('stroke-width', f2(b[2] / 240)); });
+          }
+          for (var i = 0; i < 3; i++) {
+            var pts = polygon(compose(R, invert(cameraAt(i, u))));
+            clips[i].setAttribute('points', pts);
+            if (edges[i]) edges[i].setAttribute('points', pts);
+            views[i].setAttribute('transform', Rattr);
+            setWorld(views[i], u);
+          }
+        };
+      }
+    };
+  }
+
+  /* ---------- Intro figure: N input videos -> MViS -> video panorama, playing on its own ---------- */
+  (function () {
+    var root = document.getElementById('mv-intro');
+    if (!root) return;
+    var layer = root.querySelector('.mv-intro-dynamic');
+    var label = root.querySelector('.mv-intro-pano-label');
+    var ROWS = [46, 136, 226];           // top of each input video's front frame
+    var SCALE = 0.75;                    // input frames are drawn at 126 x 72
+    var HOLD = 0.6;                      // pause at both ends of the clip, in seconds
+    var b = PANO_BOUNDS.scene, ps = Math.min(388 / b[2], 220 / b[3]);
+    var pw = b[2] * ps, ph = b[3] * ps, px = 344 + (412 - pw - 20) / 2, py = 172 - ph / 2 + 10;
+    var motion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+
+    label.setAttribute('x', f2(px + 10 + pw / 2));
+    label.setAttribute('y', f2(py - 32));
+
+    function card(x, y, w, h, fill) {
+      return '<rect x="' + f2(x) + '" y="' + f2(y) + '" width="' + f2(w) + '" height="' + f2(h) + '" fill="' + fill + '" stroke="#fff" stroke-width="1.5"/>';
+    }
+    // each input video as a stack of its frames u + 2, u + 1 (behind) and u (front)
+    var s = '';
+    ROWS.forEach(function (y, i) {
+      [2, 1, 0].forEach(function (d) {
+        s += '<g transform="translate(' + (4 + 8 * d) + ',' + (y - 8 * d) + ') scale(' + SCALE + ')"><g clip-path="url(#mv-clip)">' +
+          rect(FRAME_BOX, '#000') + '<g data-video="' + i + '" data-ahead="' + d + '">' + world(0) + '</g>' +
+          (TINT[i] ? rect(FRAME_BOX, TINT[i]) : '') + '</g><rect width="168" height="96" fill="none" stroke="#fff" stroke-width="2.5"/></g>';
+      });
+    });
+    // the panorama video, also drawn as a stack
+    var pano = makePano('mv-ic', false);
+    s += card(px + 20, py - 20, pw, ph, '#262626') + card(px + 10, py - 10, pw, ph, '#262626');
+    s += '<g transform="translate(' + f2(px) + ',' + f2(py) + ') scale(' + ps.toFixed(4) + ') translate(' + f2(-b[0]) + ',' + f2(-b[1]) + ')">' +
+      pano.markup + '</g>' + card(px, py, pw, ph, 'none');
+    layer.innerHTML = s;
+
+    var inputs = Array.prototype.slice.call(layer.querySelectorAll('[data-video]')).map(function (el) {
+      return { el: el, i: +el.getAttribute('data-video'), ahead: +el.getAttribute('data-ahead') };
+    });
+    var updatePano = pano.attach(layer);
+    function draw(u) {
+      inputs.forEach(function (v) {
+        v.el.setAttribute('transform', matrixAttr(cameraAt(v.i, u + v.ahead)));
+        setWorld(v.el, u + v.ahead);
+      });
+      updatePano('scene', u);
+    }
+
+    // continuous playback, looping; the clock is in seconds and starts mid-clip, where the still image is
+    var CYCLE = 2 * HOLD + (N - 1) / RATE, START = 9;
+    var clock = HOLD + START / RATE, last = null, raf = null, visible = false;
+    function frameAt(sec) { return Math.max(0, Math.min(N - 1, (sec % CYCLE - HOLD) * RATE)); }
+    function tick(now) {
+      if (last !== null) clock += Math.min(0.1, (now - last) / 1000);
+      last = now;
+      draw(frameAt(clock));
+      raf = window.requestAnimationFrame(tick);
+    }
+    // play only while on screen, and not at all when the reader prefers reduced motion
+    function sync() {
+      var run = visible && !document.hidden && !(motion && motion.matches);
+      if (run && raf === null) { last = null; raf = window.requestAnimationFrame(tick); }
+      else if (!run && raf !== null) { window.cancelAnimationFrame(raf); raf = null; }
+    }
+    draw(START);
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) { visible = entries[0].isIntersecting; sync(); }, { rootMargin: '80px 0px' }).observe(root);
+    } else {
+      visible = true;
+      sync();
+    }
+    document.addEventListener('visibilitychange', sync);
+  })();
+
+  /* ---------- Last figure: the panorama over time with the two choices of reference ---------- */
+  (function () {
+    var root = document.getElementById('mv-pano-types');
+    if (!root) return;
+    var range = root.querySelector('.mv-range');
+    var readout = root.querySelector('.mv-readout');
+    var holder = root.querySelector('.mv-pano');
+    var button = root.querySelector('.mv-play');
+    var modeButtons = Array.prototype.slice.call(root.querySelectorAll('.mv-seg button'));
+    var pano = makePano('mv-pc', true);
+    holder.innerHTML = '<svg class="mv-img" aria-hidden="true">' + pano.markup + '</svg>';
+    var svg = holder.querySelector('svg'), update = pano.attach(svg);
+    var current = 0, mode = 'camera', hold = 0;
+
+    function show(u) {
+      current = u;
+      range.value = u;
+      readout.textContent = 't = ' + (Math.round(u) + 1);
+      svg.setAttribute('viewBox', viewBox(PANO_BOUNDS[mode]));
+      update(mode, u);
+    }
+    // plays on its own and loops, pausing briefly at the end of the clip
+    var player = autoPlayer(root, button, function (dt) {
+      if (current >= N - 1) {
+        hold += dt;
+        if (hold > 0.6) { hold = 0; show(0); }
+      } else {
+        show(Math.min(N - 1, current + dt * RATE));
+      }
+    });
+    range.addEventListener('input', function () { player.stop(); show(+range.value); });
+    modeButtons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        mode = btn.getAttribute('data-mode');
+        modeButtons.forEach(function (o) { o.setAttribute('aria-pressed', o === btn ? 'true' : 'false'); });
+        show(current);
+      });
+    });
+    show(0);
+  })();
+
+  /* ---------- Overview figure: four cards (match pairs -> one homography per frame -> check pairs -> panorama).
+     One clock lights the cards in turn and aligns the panorama during step 3; Pause freezes it, Show all shows everything. ---------- */
+  (function () {
+    var root = document.getElementById('mv-overview');
+    if (!root) return;
+    var more = document.getElementById('ov-more'), list = root.querySelector('.ov-steps');
+    var cards = Array.prototype.slice.call(root.querySelectorAll('.ov-card'));
+    var T = 9, STEP = 3, LOOP = 4 * STEP + 1.5;
+    function at(x, y, sc, inner) { return '<g transform="translate(' + f2(x) + ',' + f2(y) + ') scale(' + sc + ')">' + inner + '</g>'; }
+    function mini(i, sc) { return frame(CAMS[i][T], TINT[i], T) + '<rect x="1" y="1" width="166" height="94" fill="none" stroke="' + CAM_COLOR[i] + '" stroke-width="' + f2(2 / sc) + '"/>'; }
+    function vis(name, svg) { root.querySelector('[data-vis="' + name + '"]').innerHTML = svg; }
+    var HEAD = '<marker id="ov-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a8578"/></marker>';
+
+    // 1: two frames with matching keypoints
+    var S1 = 0.44, A = [2, 4], B = [92, 40], LM = [[460, 160], [610, 192], [530, 184], [470, 98], [700, 166], [495, 186], [425, 236]];
+    var m = '';
+    LM.forEach(function (w) {
+      var p = apply(CAMS[0][T], w), q = apply(CAMS[1][T], w);
+      if (p[0] < 6 || p[0] > W - 6 || p[1] < 6 || p[1] > H - 6 || q[0] < 6 || q[0] > W - 6 || q[1] < 6 || q[1] > H - 6) return;
+      var x0 = A[0] + S1 * p[0], y0 = A[1] + S1 * p[1], x1 = B[0] + S1 * q[0], y1 = B[1] + S1 * q[1];
+      m += '<line x1="' + f2(x0) + '" y1="' + f2(y0) + '" x2="' + f2(x1) + '" y2="' + f2(y1) + '" stroke="#2FB36A" stroke-width="1.2"/>' +
+        '<circle cx="' + f2(x0) + '" cy="' + f2(y0) + '" r="1.8" fill="#2FB36A"/><circle cx="' + f2(x1) + '" cy="' + f2(y1) + '" r="1.8" fill="#2FB36A"/>';
+    });
+    vis('match', '<svg viewBox="0 0 168 84" aria-hidden="true">' + at(A[0], A[1], S1, mini(0, S1)) + at(B[0], B[1], S1, mini(1, S1)) + m + '</svg>');
+
+    // 2: all 2N frames (videos in rows, t and t+1 in columns) -> network -> one H per frame, indexed by video and time
+    var S2 = 0.2, FW = W * S2, FH = H * S2, net = '<text class="ov-pill" x="' + f2(FW / 2) + '" y="8" text-anchor="middle" fill="#5d5a50" font-style="italic">t</text>' +
+      '<text class="ov-pill" x="' + f2(36 + FW / 2) + '" y="8" text-anchor="middle" fill="#5d5a50"><tspan font-style="italic">t</tspan>+1</text>';
+    function hlab(x, y, i, b) {
+      return '<text class="ov-f" x="' + x + '" y="' + y + '" text-anchor="middle" style="font-size:10.5px"><tspan font-style="italic" font-weight="bold">H</tspan>' +
+        '<tspan dy="-4" font-size="7" font-style="italic">t</tspan>' + (b ? '<tspan font-size="7">+1</tspan>' : '') +
+        '<tspan dx="' + (b ? -9.6 : -2.2) + '" dy="7.5" font-size="7">' + (i + 1) + '</tspan></text>';
+    }
+    [0, 1, 2].forEach(function (i) {
+      var y = 14 + i * 26;
+      [0, 1].forEach(function (b) {
+        net += at(b * 36, y, S2, frame(CAMS[i][T + b], TINT[i], T + b) + '<rect x="1" y="1" width="166" height="94" fill="none" stroke="' + CAM_COLOR[i] + '" stroke-width="' + f2(2 / S2) + '"/>') +
+          '<g class="ov-chip"><rect x="' + (104 + b * 32) + '" y="' + f2(y - 0.5) + '" width="30" height="20" rx="4" fill="#ffffff" stroke="' + CAM_COLOR[i] + '" stroke-width="1.6"/>' +
+          hlab(104 + b * 32 + 15, f2(y + 12), i, b) + '</g>';
+      });
+    });
+    var CY = 14 + 26 + FH / 2;   // middle row: one line into the network, one arrow out
+    net += '<text class="ov-pill" x="119" y="8" text-anchor="middle" fill="#5d5a50" font-style="italic">t</text>' +
+      '<text class="ov-pill" x="151" y="8" text-anchor="middle" fill="#5d5a50"><tspan font-style="italic">t</tspan>+1</text>' +
+      '<line x1="71" y1="' + f2(CY) + '" x2="78" y2="' + f2(CY) + '" stroke="#8a8578" stroke-width="1.3"/>' +
+      '<path d="M78,' + f2(CY - 26) + ' L92,' + f2(CY - 14) + ' L92,' + f2(CY + 14) + ' L78,' + f2(CY + 26) + ' Z" fill="#E8EEF8" stroke="#7D93BF" stroke-width="1.2"/>' +
+      '<line x1="92" y1="' + f2(CY) + '" x2="101" y2="' + f2(CY) + '" stroke="#8a8578" stroke-width="1.3" marker-end="url(#ov-head)"/>';
+    vis('net', '<svg viewBox="0 0 168 90" aria-hidden="true"><defs>' + HEAD + '</defs>' + net + '</svg>');
+
+    // 3: the composition of two predictions vs. the ORT, and the two stages
+    var loss = '<text class="ov-f" x="104" y="30" text-anchor="end">' +
+      '<tspan font-style="italic" font-weight="bold">H</tspan><tspan dy="5" font-size="12">2</tspan><tspan dy="-13" font-size="12">&minus;1</tspan>' +
+      '<tspan dy="8" dx="2" font-style="italic" font-weight="bold">H</tspan><tspan dy="5" font-size="12">1</tspan>' +
+      '<tspan class="ov-approx" dy="-5" dx="6" fill="#E24B4A">&#8776;</tspan></text>' +
+      '<text class="ov-f" x="110" y="30"><tspan font-style="italic" font-weight="bold" fill="#1f8a4c">&#292;</tspan><tspan dy="5" font-size="12" fill="#1f8a4c">1&rarr;2</tspan></text>' +
+      '<text class="ov-orttag" x="127" y="47" text-anchor="middle" fill="#5d5a50" style="font-size:9px;font-family:var(--font-body)">(the ORT)</text>';
+    [['Stage 1: geometry', 58], ['Stage 2: appearance', 82]].forEach(function (st, q) {
+      loss += '<g class="ov-stage" data-q="' + q + '"><rect x="24" y="' + st[1] + '" width="120" height="20" rx="10" fill="#EEF2FA" stroke="#9FB2D8" stroke-width="1"/>' +
+        '<text class="ov-pill" x="84" y="' + (st[1] + 14) + '" text-anchor="middle" fill="#12296B">' + st[0] + '</text></g>';
+    });
+    vis('loss', '<svg viewBox="0 0 168 104" aria-hidden="true">' + loss + '</svg>');
+
+    // 4: the panorama, the frames at time t warped by their homographies; they start misaligned and settle
+    var toPano = [0, 1, 2].map(function (i) { return solution(i, T); });
+    var pts = [];
+    toPano.forEach(function (M) { CORNERS.forEach(function (c) { pts.push(apply(M, c)); }); });
+    var pb = bounds(pts, 30), k = Math.min(168 / pb[2], 84 / pb[3]), PW = pb[2] * k, PH = pb[3] * k, PX = (168 - PW) / 2;
+    var ERR = [[0, 0, 0], [8, 18, -12], [-7, -16, 12]], cen = [pb[0] + pb[2] / 2, pb[1] + pb[3] / 2];
+    function err(i, e) {
+      var th = ERR[i][0] * e * DEG, c = Math.cos(th), n = Math.sin(th);
+      return [c, n, -n, c, cen[0] - (c * cen[0] - n * cen[1]) + ERR[i][1] * e, cen[1] - (n * cen[0] + c * cen[1]) + ERR[i][2] * e];
+    }
+    var pano = '<rect x="' + f2(PX) + '" y="0" width="' + f2(PW) + '" height="' + f2(PH) + '" rx="3" fill="#000"/>' +
+      '<g transform="translate(' + f2(PX - pb[0] * k) + ',' + f2(-pb[1] * k) + ') scale(' + k.toFixed(5) + ')">';
+    [2, 1, 0].forEach(function (i) {
+      pano += '<defs><clipPath id="ov-pc' + i + '"><polygon class="ov-pclip" data-i="' + i + '" points="0,0"/></clipPath></defs>' +
+        '<g clip-path="url(#ov-pc' + i + ')" opacity="0.85"><g class="ov-pframe" data-i="' + i + '">' + world(T) + '</g></g>' +
+        '<polygon class="ov-pline" data-i="' + i + '" points="0,0" fill="none" stroke="' + CAM_COLOR[i] + '" stroke-width="' + f2(2 / k) + '"/>';
+    });
+    vis('pano', '<svg viewBox="0 0 168 ' + f2(PH) + '" aria-hidden="true">' + pano + '</g></svg>');
+
+    var pclips = [], plines = [], pframes = [];
+    Array.prototype.forEach.call(root.querySelectorAll('.ov-pclip'), function (el) { pclips[+el.getAttribute('data-i')] = el; });
+    Array.prototype.forEach.call(root.querySelectorAll('.ov-pline'), function (el) { plines[+el.getAttribute('data-i')] = el; });
+    Array.prototype.forEach.call(root.querySelectorAll('.ov-pframe'), function (el) { pframes[+el.getAttribute('data-i')] = el; });
+    var chips = Array.prototype.slice.call(root.querySelectorAll('.ov-chip'));
+    var stages = Array.prototype.slice.call(root.querySelectorAll('.ov-stage'));
+    var approx = root.querySelector('.ov-approx');
+
+    function ramp(x, a, b) { return Math.max(0, Math.min(1, (x - a) / (b - a))); }
+    function smooth(p) { return p * p * (3 - 2 * p); }
+    function setPanorama(l) {
+      [0, 1, 2].forEach(function (i) {
+        var M = compose(err(i, 1 - l), toPano[i]), q = polygon(M);
+        pclips[i].setAttribute('points', q); plines[i].setAttribute('points', q);
+        pframes[i].setAttribute('transform', matrixAttr(compose(M, CAMS[i][T])));
+      });
+    }
+    // draw at time tm of the loop, or everything at once (all = true)
+    function draw(tm, all) {
+      var step = all ? -1 : Math.min(3, Math.floor(tm / STEP));
+      list.classList.toggle('is-playing', !all);
+      cards.forEach(function (c, q) { c.classList.toggle('is-on', q === step); });
+      // the panorama aligns while step 3 trains the network: Stage 1 does most of it, Stage 2 finishes it
+      var s3 = 2 * STEP, l = all ? 1 : 0.8 * smooth(ramp(tm, s3 + 0.2, s3 + 1.6)) + 0.2 * smooth(ramp(tm, s3 + 1.6, s3 + 2.8));
+      setPanorama(l);
+      stages.forEach(function (g, q) {
+        var on = all || step !== 2 || (q === 0 ? tm < s3 + 1.6 : tm >= s3 + 1.6);
+        g.setAttribute('opacity', on ? '1' : '0.3');
+      });
+      chips.forEach(function (c) { c.setAttribute('opacity', !all && step === 2 ? (0.75 + 0.25 * Math.cos(tm * 8)).toFixed(3) : '1'); });
+      approx.setAttribute('fill', l > 0.97 || all ? '#1f8a4c' : '#E24B4A');
+    }
+
+    var tm = 0, last = null, raf = null, visible = false, paused = false, frozen = false;
+    var playBtn = root.querySelector('.mv-play'), allBtn = root.querySelector('.ov-all');
+    function tick(now) {
+      if (last !== null) tm = (tm + Math.min(0.1, (now - last) / 1000)) % LOOP;
+      last = now;
+      draw(tm, false);
+      raf = window.requestAnimationFrame(tick);
+    }
+    function sync() {
+      var run = visible && !document.hidden && !paused && !frozen;
+      if (run && raf === null) { last = null; raf = window.requestAnimationFrame(tick); }
+      else if (!run && raf !== null) { window.cancelAnimationFrame(raf); raf = null; }
+      playIcon(playBtn, run || (!paused && !frozen));
+    }
+    function setFrozen(on) {
+      frozen = on;
+      allBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (more) more.hidden = !on;
+      if (on) { paused = false; draw(0, true); } else draw(tm, false);
+      sync();
+    }
+    playBtn.addEventListener('click', function () {
+      if (frozen) { setFrozen(false); return; }                 // leave "show all" and play again
+      paused = !paused;
+      sync();
+    });
+    allBtn.addEventListener('click', function () { setFrozen(!frozen); });
+    if (MOTION && MOTION.matches) { setFrozen(true); }        // reduced motion: everything, still
+    else draw(0, false);
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) { visible = entries[0].isIntersecting; sync(); }, { threshold: 0.25 }).observe(root);
+    }
+    document.addEventListener('visibilitychange', sync);
+  })();
+
+  /* ---------- Preprocessing figure: image pair -> image matcher -> ORT -> mask, one block after another ---------- */
+  (function () {
+    var root = document.getElementById('mv-prep');
+    if (!root) return;
+    var T = 9, SRC = 1, TGT = 0, SC = 0.9;          // the pair video 2 -> video 1 at time t; frames drawn at 0.9 scale
+    var tgt = CAMS[TGT][T], src = CAMS[SRC][T];
+    var rel = compose(tgt, invert(src));
+    // the ORT: the true relative transformation with a small estimation error
+    var ort = compose([Math.cos(1.2 * DEG), Math.sin(1.2 * DEG), -Math.sin(1.2 * DEG), Math.cos(1.2 * DEG), 1.8, -1.6], rel);
+    // block positions: one row on wide screens; on phones, two rows (pair -> matcher, then ORT -> mask) so the labels stay readable
+    var compact = false; // single row everywhere
+    var A = [10, 30], A2 = [10, 136], MID = 123;
+    var C = compact ? [10, 304] : [222, 80], D = compact ? [199, 304] : [420, 80];
+    var BOXX = compact ? 196 : 188, BOXW = compact ? 154 : 148, VIEW = compact ? '0 0 360 398' : '0 0 590 240';
+    function at(o, inner) { return '<g transform="translate(' + o[0] + ',' + o[1] + ') scale(' + SC + ')">' + inner + '</g>'; }
+    function outline(color) { return '<rect x="1" y="1" width="166" height="94" fill="none" stroke="' + color + '" stroke-width="2.2"/>'; }
+    function arrow(x0, x1, y) { y = y === undefined ? MID : y; return '<line x1="' + x0 + '" y1="' + y + '" x2="' + x1 + '" y2="' + y + '" stroke="#8a8578" stroke-width="2" marker-end="url(#pp-head)"/>'; }
+
+    // correspondences: landmarks seen in both frames, plus two wrong matches for RANSAC to reject
+    var LM = [[460, 160], [480, 163], [458, 223], [438, 201], [482, 201], [610, 192], [610, 231], [530, 184], [470, 98], [700, 166], [425, 236], [560, 203], [495, 186]];
+    function inside(q) { return q[0] > 4 && q[0] < W - 4 && q[1] > 4 && q[1] < H - 4; }
+    var matches = [];
+    LM.forEach(function (w) {
+      var qt = apply(tgt, w), qs = apply(src, w);
+      if (inside(qt) && inside(qs) && matches.length < 9) matches.push([qs, qt, false]);
+    });
+    if (matches.length > 4) {
+      matches.push([matches[0][0], matches[4][1], true]);
+      matches.push([matches[3][0], matches[1][1], true]);
+    }
+    var lines = matches.map(function (m) {
+      var x0 = A2[0] + SC * m[0][0], y0 = A2[1] + SC * m[0][1], x1 = A[0] + SC * m[1][0], y1 = A[1] + SC * m[1][1];
+      var col = m[2] ? '#E5484D' : '#2FB36A';
+      return '<g class="pp-step pp-match' + (m[2] ? ' pp-out' : '') + '"><line class="pp-line" pathLength="1" x1="' + f2(x0) + '" y1="' + f2(y0) + '" x2="' + f2(x1) + '" y2="' + f2(y1) + '" stroke="' + col + '" stroke-width="1.4"/>' +
+        '<circle cx="' + f2(x0) + '" cy="' + f2(y0) + '" r="2" fill="' + col + '" stroke="#ffffff" stroke-width="0.8"/>' +
+        '<circle cx="' + f2(x1) + '" cy="' + f2(y1) + '" r="2" fill="' + col + '" stroke="#ffffff" stroke-width="0.8"/></g>';
+    }).join('');
+
+    var black = rect(FRAME_BOX, '#000');
+    var svg = '<svg viewBox="' + VIEW + '" aria-hidden="true"><defs>' +
+      '<marker id="pp-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a8578"/></marker>' +
+      '<clipPath id="pp-warp"><polygon class="pp-warp-clip" points="0,0"/></clipPath></defs>' +
+      // 1: the image pair
+      '<g class="pp-step" data-step="pair">' +
+        '<text class="pp-small" x="' + A[0] + '" y="' + (A[1] - 7) + '">video 1, <tspan font-style="italic">t</tspan> (target)</text>' +
+        at(A, frame(tgt, TINT[TGT], T) + outline(CAM_COLOR[TGT])) + at(A2, frame(src, TINT[SRC], T) + outline(CAM_COLOR[SRC])) +
+        '<text class="pp-small" x="' + A2[0] + '" y="' + (A2[1] + 86.4 + 15) + '">video 2, <tspan font-style="italic">t</tspan> (source)</text></g>' +
+      // 2: the image matcher and its correspondences
+      '<g class="pp-step" data-step="matcher"></g>' +   // (no matcher box: the matches go straight to the ORT)
+      '<g data-step="lines">' + lines + '</g>' +
+      // 3: the ORT, warping the source frame onto the target frame
+      '<g class="pp-step" data-step="ort">' + (compact
+        ? '<path d="M' + (BOXX + BOXW / 2) + ' ' + (MID + 34) + 'V246H' + (C[0] + 75.6) + 'V' + (C[1] - 30) + '" fill="none" stroke="#8a8578" stroke-width="2" marker-end="url(#pp-head)"/>'
+        : arrow(166, C[0] - 4)) +
+        '<text class="pp-text" x="' + (C[0] + 75.6) + '" y="' + (C[1] - 10) + '" text-anchor="middle">ORT <tspan font-style="italic" font-weight="bold">&#292;</tspan>' +
+        '<tspan dy="-6" font-size="9.5" font-style="italic">t</tspan><tspan dy="10" font-size="9.5">2&rarr;1</tspan></text>' +
+        at(C, frame(tgt, TINT[TGT], T) + '<g clip-path="url(#mv-clip)"><g opacity="0.85" clip-path="url(#pp-warp)"><g class="pp-warp-content">' + world(T) + '</g>' +
+          (TINT[SRC] ? rect(FRAME_BOX, TINT[SRC]) : '') + '</g><polygon class="pp-warp-edge" points="0,0" fill="none" stroke="' + CAM_COLOR[SRC] +
+          '" stroke-width="2.4" stroke-dasharray="6 4"/></g>' + outline(CAM_COLOR[TGT])) + '</g>' +
+      // 4: the overlap mask, an all-ones image warped by the ORT
+      '<g class="pp-step" data-step="mask">' + arrow(C[0] + 151.2 + 4, D[0] - 4, compact ? C[1] + 43.2 : MID) +
+        '<text class="pp-text" x="' + (D[0] + 75.6) + '" y="' + (D[1] - 10) + '" text-anchor="middle">Mask <tspan font-style="italic">M</tspan>' +
+        '<tspan dy="-6" font-size="9.5" font-style="italic">t</tspan><tspan dy="10" font-size="9.5">2&rarr;1</tspan></text>' +
+        at(D, black + '<g clip-path="url(#mv-clip)"><polygon class="pp-mask" points="0,0" fill="#ffffff"/></g>' +
+          '<rect x="0.5" y="0.5" width="167" height="95" fill="none" stroke="#8a8578" stroke-width="1"/>') +
+        '<text class="pp-small" x="' + (D[0] + 75.6) + '" y="' + f2(D[1] + 86.4 + 18) + '" text-anchor="middle">warp with ORT</text></g>' +
+      '</svg>';
+    root.querySelector('.mv-prep-svg').innerHTML = svg;
+
+    function q(sel) { return root.querySelector(sel); }
+    var steps = {};
+    Array.prototype.slice.call(root.querySelectorAll('[data-step]')).forEach(function (el) { steps[el.getAttribute('data-step')] = el; });
+    var matchEls = Array.prototype.slice.call(root.querySelectorAll('.pp-match'));
+    var outEls = Array.prototype.slice.call(root.querySelectorAll('.pp-out'));
+    function setMatch(el, yes) { on(el, yes); on(el.querySelector('.pp-line'), yes); }
+    var warpClip = q('.pp-warp-clip'), warpEdge = q('.pp-warp-edge'), warpContent = q('.pp-warp-content'), mask = q('.pp-mask');
+    function setWarp(l) {
+      var M = partial(ort, l), pts = polygon(M);
+      warpClip.setAttribute('points', pts);
+      warpEdge.setAttribute('points', pts);
+      warpContent.setAttribute('transform', matrixAttr(compose(M, src)));
+    }
+    function setMask(l) { mask.setAttribute('points', polygon(partial(ort, l))); }
+    function on(el, yes) { if (yes) el.classList.add('is-on'); else el.classList.remove('is-on'); }
+    function setAll(done) {
+      ['pair', 'matcher', 'ort', 'mask'].forEach(function (k) { on(steps[k], done); });
+      matchEls.forEach(function (el) { setMatch(el, done); });
+      outEls.forEach(function (el) { if (done) el.classList.add('is-rejected'); else el.classList.remove('is-rejected'); });
+      setWarp(done ? 1 : 0);
+      setMask(done ? 1 : 0);
+    }
+
+    // a small timeline; bumping `run` cancels everything pending
+    var run = 0;
+    function later(ms, fn) { var id = run; window.setTimeout(function () { if (id === run) fn(); }, ms); }
+    function animate(ms, fn, next) {
+      var id = run, start = null;
+      function tick(now) {
+        if (id !== run) return;
+        if (start === null) start = now;
+        var p = Math.min(1, (now - start) / ms);
+        fn(p < 0.5 ? 2 * p * p : 1 - Math.pow(2 - 2 * p, 2) / 2);
+        if (p < 1) window.requestAnimationFrame(tick); else if (next) next();
+      }
+      window.requestAnimationFrame(tick);
+    }
+    function play() {
+      setAll(false);
+      later(300, function () { on(steps.pair, true); });
+      later(1000, function () { on(steps.matcher, true); });
+      later(1500, function () { matchEls.forEach(function (el, n) { later(n * 70, function () { setMatch(el, true); }); }); });
+      later(3000, function () { outEls.forEach(function (el) { el.classList.add('is-rejected'); }); });
+      later(3500, function () { on(steps.ort, true); });
+      later(4100, function () { animate(1300, setWarp); });
+      later(5800, function () { on(steps.mask, true); });
+      later(6300, function () { animate(1000, setMask); });
+      later(9800, function () { ['pair', 'matcher', 'ort', 'mask'].forEach(function (k) { on(steps[k], false); }); matchEls.forEach(function (el) { setMatch(el, false); }); });
+      later(10600, play);
+    }
+
+    // the whole figure by default; the build-up plays only while on screen, and not with reduced motion
+    var playing = false, visible = false;
+    function sync() {
+      var should = visible && !document.hidden && !(MOTION && MOTION.matches);
+      if (should && !playing) { playing = true; run++; play(); }
+      else if (!should && playing) { playing = false; run++; setAll(true); }
+    }
+    setAll(true);
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) { visible = entries[0].isIntersecting; sync(); }, { threshold: 0.3 }).observe(root);
+    }
+    document.addEventListener('visibilitychange', sync);
+  })();
+
+  /* ---------- Figure 2: Stage 1, ORT-guided geometric loss ---------- */
+  (function () {
+    var root = document.getElementById('mv-stage1');
+    if (!root) return;
+    var T = 9; // one window, frames 10 and 11
+    var TAU = [60, 85, 110]; // per-video speed of the schematic optimization
+    var GRID = [];
+    for (var r = 0; r < 7; r++) for (var c = 0; c < 7; c++) GRID.push([c / 6 * W, r / 6 * H]);
+
+    function lambda(i, p) { return (1 - Math.exp(-600 * p / TAU[i])) / (1 - Math.exp(-600 / TAU[i])); }
+    function predicted(i, t, p) { return partial(solution(i, t), lambda(i, p)); }
+    function relative(pair, p) { return compose(invert(predicted(pair.j, pair.tj, p)), predicted(pair.i, pair.ti, p)); }
+    function ortPoints(M, seed) { // the exact relative transformation plus a smooth error and jitter
+      var rand = rng(seed), A = [rand() * 0.03, rand() * 0.03, rand() * 0.03, rand() * 0.03], d = [rand() * 2.4, rand() * 2.4];
+      return GRID.map(function (g) {
+        var p = apply(M, g), x = g[0] - W / 2, y = g[1] - H / 2;
+        return [p[0] + A[0] * x + A[1] * y + d[0] + rand() * 0.6, p[1] + A[2] * x + A[3] * y + d[1] + rand() * 0.6];
+      });
+    }
+
+    // each panel is labeled with the exact terms of the paper's Eqs. 1-4: the ORT applied to the grid G (diamonds)
+    // and the composition of the predictions applied to G (crosses)
+    function ss(sup, sub) { return '<span class="mv-ss"><span>' + sup + '</span><span>' + sub + '</span></span>'; }
+    function tS(dt) { return dt ? '<var>t</var>+1' : '<var>t</var>'; }
+    function Hs(v, dt) { return '<var class="bm">H</var>' + ss(tS(dt), String(v + 1)); }
+    function pairLabel(i, j, di, dj) {
+      var ort = i === j ? ss(tS(di) + '&rarr;' + tS(dj), String(i + 1)) : ss(tS(di), (i + 1) + '&rarr;' + (j + 1));
+      return '<span class="mv-nw"><span style="color:#4169e1">&#9670;</span> <var class="bm">&#292;</var>' + ort + '(<var class="bm">G</var>)</span><br>' +
+        '<span class="mv-nw"><span style="color:#e03131">&times;</span> ((' + Hs(j, dj) + ')<sup>&minus;1</sup>' + Hs(i, di) + ')(<var class="bm">G</var>)</span>';
+    }
+    var pairs = [];
+    [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]].forEach(function (ij, q) {
+      pairs.push({ i: ij[0], j: ij[1], ti: T, tj: T, label: pairLabel(ij[0], ij[1], 0, 0), seed: 131 * T + 7 * q + 1 });
+    });
+    [0, 1, 2].forEach(function (i) {
+      pairs.push({ i: i, j: i, ti: T, tj: T + 1, label: pairLabel(i, i, 0, 1), seed: 131 * T + 50 + i });
+      pairs.push({ i: i, j: i, ti: T + 1, tj: T, label: pairLabel(i, i, 1, 0), seed: 131 * T + 70 + i });
+    });
+
+    var cells = pairs.map(function (pair) {
+      var target = CAMS[pair.j][pair.tj];
+      pair.ort = ortPoints(compose(target, invert(CAMS[pair.i][pair.ti])), pair.seed);
+      var pts = pair.ort.concat([[0, 0], [W, H]]);
+      [0, 0.03, 0.07, 0.13, 0.25, 1].forEach(function (p) {
+        var M = relative(pair, p);
+        GRID.forEach(function (g) { pts.push(apply(M, g)); });
+      });
+      var b = bounds(pts, 6, 1.3), m = b[2] / 50;
+      pair.m = m;
+      var diamonds = pair.ort.map(function (q) {
+        return 'M' + f2(q[0]) + ' ' + f2(q[1] - m) + 'L' + f2(q[0] + m) + ' ' + f2(q[1]) + 'L' + f2(q[0]) + ' ' + f2(q[1] + m) + 'L' + f2(q[0] - m) + ' ' + f2(q[1]) + 'Z';
+      }).join('');
+      return '<div><svg viewBox="' + viewBox(b) + '" aria-hidden="true">' + rect(b, '#ffffff') + frame(target, TINT[pair.j], pair.tj) +
+        '<rect width="' + W + '" height="' + H + '" fill="none" stroke="#999999" stroke-width="' + f2(m * 0.25) + '"/>' +
+        '<path d="' + diamonds + '" fill="#4169e1"/>' +
+        '<path class="mv-cross" fill="none" stroke="#e03131" stroke-width="' + f2(m * 0.4) + '"/></svg>' +
+        '<span class="mv-label mv-g6-label">' + pair.label + '</span></div>';
+    });
+    root.querySelector('.mv-top').innerHTML = cells.slice(0, 6).join('');
+    root.querySelector('.mv-bottom').innerHTML = cells.slice(6).join('');
+    var crosses = Array.prototype.slice.call(root.querySelectorAll('.mv-cross'));
+
+
+    function update(p) {
+      crosses.forEach(function (el, k) {
+        var pair = pairs[k], M = relative(pair, p), q = pair.m * 0.8;
+        el.setAttribute('d', GRID.map(function (g) {
+          var x = apply(M, g);
+          return 'M' + f2(x[0] - q) + ' ' + f2(x[1] - q) + 'L' + f2(x[0] + q) + ' ' + f2(x[1] + q) +
+                 'M' + f2(x[0] - q) + ' ' + f2(x[1] + q) + 'L' + f2(x[0] + q) + ' ' + f2(x[1] - q);
+        }).join(''));
+      });
+    }
+
+    var range = root.querySelector('.mv-range'), progress = 0, hold = -0.6;
+    function set(v) { progress = v; range.value = v; update(v / 100); }
+    // plays on its own and loops: 3 s from the identity to convergence, a pause on the result, a short pause at the start
+    var player = autoPlayer(root, root.querySelector('.mv-play'), function (dt) {
+      if (progress >= 100) {
+        hold += dt;
+        if (hold > 2.5) { hold = -0.8; set(0); }
+      } else if (hold < 0) {
+        hold = Math.min(0, hold + dt);
+      } else {
+        set(Math.min(100, progress + dt * 100 / 3));
+      }
+    });
+    range.addEventListener('input', function () { player.stop(); hold = 0; set(+range.value); });
+    set(MOTION && MOTION.matches ? 100 : 0); // a still image shows the converged result
+  })();
+
+  /* ---------- GV figure: one keypoint on the mountain top, its copies in the panorama, and their spread ---------- */
+  // Each video's frame at time t is rasterized once; every animation frame only places those bitmaps on a canvas,
+  // so the loop stays smooth. Views are averaged where they overlap, so misalignment shows as ghosting.
+  (function () {
+    var root = document.getElementById('mv-gv');
+    if (!root) return;
+    var T = 9, PEAK = [470, 98], KP = '#FF2E88';
+    var DIAG = Math.sqrt(W * W + H * H);
+    var R = CAMS[0][T];                                                                   // the panorama is video 1's view at time t
+    var Ts = [0, 1, 2].map(function (i) { return compose(R, invert(CAMS[i][T])); });     // T^{t,i}: frame i -> panorama
+    var key = apply(R, PEAK);                                                             // where every copy lands when aligned
+    // misalignment on top of T^{t,i}: [degrees, dx, dy] per video, a rotation about the panorama center and a shift
+    var ERR = [[0, 0, 0], [3.5, 6, -4], [-3, -6, 4]];
+    var center = (function () {
+      var pts = [];
+      Ts.forEach(function (M) { CORNERS.forEach(function (c) { pts.push(apply(M, c)); }); });
+      var b = bounds(pts, 0);
+      return [b[0] + b[2] / 2, b[1] + b[3] / 2];
+    })();
+    function errorAt(i, l) {
+      var th = ERR[i][0] * l * DEG, c = Math.cos(th), n = Math.sin(th);
+      return [c, n, -n, c, center[0] - (c * center[0] - n * center[1]) + ERR[i][1] * l, center[1] - (n * center[0] + c * center[1]) + ERR[i][2] * l];
+    }
+    var PB = (function () {
+      var pts = [];
+      [0, 1].forEach(function (l) { Ts.forEach(function (M, i) { CORNERS.forEach(function (c) { pts.push(apply(compose(errorAt(i, l), M), c)); }); }); });
+      return bounds(pts, 4);
+    })();
+    var ZOOM = (function () { // half-size of the zoom window: room for the copies at full misalignment
+      var r = 0;
+      [0, 1, 2].forEach(function (i) { var q = apply(errorAt(i, 1), key); r = Math.max(r, Math.abs(q[0] - key[0]), Math.abs(q[1] - key[1])); });
+      return Math.max(16, r * 1.5);
+    })();
+    var BOX = [key[0] - ZOOM, key[1] - ZOOM, 2 * ZOOM, 2 * ZOOM];
+
+    // the three frames at time t, each with the keypoint
+    root.querySelector('.mv-gv-frames').innerHTML = [0, 1, 2].map(function (i) {
+      var q = apply(CAMS[i][T], PEAK);
+      return '<div>' + frameSvg(frame(CAMS[i][T], TINT[i], T) +
+        '<rect x="1" y="1" width="166" height="94" fill="none" stroke="' + CAM_COLOR[i] + '" stroke-width="2"/>' +
+        '<circle cx="' + f2(q[0]) + '" cy="' + f2(q[1]) + '" r="3.6" fill="' + KP + '" stroke="#ffffff" stroke-width="1.44"/>') +
+        '<span class="mv-label">Video ' + (i + 1) + '</span></div>';
+    }).join('');
+
+    // canvases for the panorama and the zoom
+    var pano = document.createElement('canvas'), zoom = document.createElement('canvas');
+    pano.width = Math.round(PB[2] * 4); pano.height = Math.round(PB[3] * 4); // sets the aspect ratio until sized
+    zoom.width = zoom.height = 400;
+    pano.setAttribute('aria-hidden', 'true'); zoom.setAttribute('aria-hidden', 'true');
+    root.querySelector('.mv-gv-pano').appendChild(pano);
+    root.querySelector('.mv-gv-zoom').appendChild(zoom);
+    var dpr = 1, dprPano = 1;
+    function fit() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dprPano = Math.min(dpr, 1.5);
+      [[pano, PB[3] / PB[2], dprPano], [zoom, 1, dpr]].forEach(function (cr) {
+        var w = Math.max(1, Math.round(cr[0].getBoundingClientRect().width * cr[2]));
+        if (cr[0].width !== w) { cr[0].width = w; cr[0].height = Math.round(w * cr[1]); }
+      });
+    }
+
+    // each frame rasterized once, with enough resolution for the zoom
+    var RES = { pano: 6, zoom: 12 }, images = { pano: [null, null, null], zoom: [null, null, null] }, ready = 0;
+    var defs = ['mv-world-back', 'mv-world-front', 'mv-balloon-body', 'mv-cat-body'].map(function (id) {
+      var el = document.getElementById(id);
+      return el ? new XMLSerializer().serializeToString(el) : '';
+    }).join('') + '<clipPath id="mv-clip"><rect width="168" height="96"/></clipPath>';
+    [0, 1, 2].forEach(function (i) {
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="' + W * RES.zoom + '" height="' + H * RES.zoom +
+        '" viewBox="0 0 168 96"><defs>' + defs + '</defs>' + frame(CAMS[i][T], TINT[i], T) + '</svg>';
+      var img = new Image();
+      img.onload = function () {
+        ['pano', 'zoom'].forEach(function (which) {
+          var c = document.createElement('canvas');
+          c.width = W * RES[which]; c.height = H * RES[which];
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          images[which][i] = c;
+        });
+        if (++ready === 3) draw(level, true);
+      };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
+
+    // intersection of two convex polygons (Sutherland-Hodgman)
+    function intersect(subject, clipper) {
+      var area = 0, out = subject;
+      for (var n = 0; n < clipper.length; n++) {
+        var p = clipper[n], q = clipper[(n + 1) % clipper.length];
+        area += p[0] * q[1] - q[0] * p[1];
+      }
+      var sgn = area > 0 ? 1 : -1;
+      for (var e = 0; e < clipper.length && out.length; e++) {
+        var a = clipper[e], b = clipper[(e + 1) % clipper.length], input = out;
+        out = [];
+        var side = function (v) { return sgn * ((b[0] - a[0]) * (v[1] - a[1]) - (b[1] - a[1]) * (v[0] - a[0])); };
+        for (var m = 0; m < input.length; m++) {
+          var cur = input[m], prev = input[(m + input.length - 1) % input.length], sc = side(cur), sp = side(prev);
+          if (sc >= 0) {
+            if (sp < 0) { var t1 = sp / (sp - sc); out.push([prev[0] + t1 * (cur[0] - prev[0]), prev[1] + t1 * (cur[1] - prev[1])]); }
+            out.push(cur);
+          } else if (sp >= 0) {
+            var t2 = sp / (sp - sc); out.push([prev[0] + t2 * (cur[0] - prev[0]), prev[1] + t2 * (cur[1] - prev[1])]);
+          }
+        }
+      }
+      return out;
+    }
+
+    // one canvas: the averaged panorama over the box vb (panorama units), then the overlays
+    function render(cv, vb, Ms, quads, qs, mean, rms, main) {
+      var ctx = cv.getContext('2d'), k = cv.width / vb[2], bitmaps = images[main ? 'pano' : 'zoom'], res = RES[main ? 'pano' : 'zoom'];
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      function toCanvas() { ctx.setTransform(k, 0, 0, k, -k * vb[0], -k * vb[1]); }
+      function view(i, alpha, region) {
+        ctx.save();
+        if (region) {
+          toCanvas();
+          ctx.beginPath();
+          region.forEach(function (v, n) { if (n) ctx.lineTo(v[0], v[1]); else ctx.moveTo(v[0], v[1]); });
+          ctx.closePath();
+          ctx.clip();
+        }
+        var M = Ms[i];
+        ctx.setTransform(k * M[0] / res, k * M[1] / res, k * M[2] / res, k * M[3] / res, k * (M[4] - vb[0]), k * (M[5] - vb[1]));
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(bitmaps[i], 0, 0);
+        ctx.restore();
+      }
+      if (ready === 3) {
+        // average where views overlap: single coverage as is, pairs at 1/2 each, the triple overlap at 1/3 each
+        view(2, 1); view(1, 1); view(0, 1);
+        [[0, 1], [0, 2], [1, 2]].forEach(function (ij) {
+          var region = intersect(quads[ij[0]], quads[ij[1]]);
+          if (region.length > 2) { view(ij[0], 1, region); view(ij[1], 0.5, region); }
+        });
+        var triple = intersect(intersect(quads[0], quads[1]), quads[2]);
+        if (triple.length > 2) { view(0, 1, triple); view(1, 0.5, triple); view(2, 1 / 3, triple); }
+      }
+      // overlays, sized in screen pixels
+      toCanvas();
+      var px = (main ? dprPano : dpr) / k;
+      if (main) {
+        [2, 1, 0].forEach(function (i) {
+          ctx.beginPath();
+          quads[i].forEach(function (v, n) { if (n) ctx.lineTo(v[0], v[1]); else ctx.moveTo(v[0], v[1]); });
+          ctx.closePath();
+          ctx.strokeStyle = CAM_COLOR[i];
+          ctx.lineWidth = 2 * px;
+          ctx.stroke();
+        });
+        ctx.setLineDash([5 * px, 3 * px]);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2 * px;
+        ctx.strokeRect(BOX[0], BOX[1], BOX[2], BOX[3]);
+        ctx.setLineDash([]);
+      }
+      var shrink = Math.max(0.55, Math.min(1, (cv.clientWidth || 9999) / (main ? 480 : 230)));
+      var dotR = (main ? 4.5 : 8) * shrink * px;
+      ctx.strokeStyle = '#ffffff';
+      if (rms > 0.05) {
+        ctx.setLineDash([4 * px, 3 * px]);
+        ctx.lineWidth = 1.6 * px;
+        ctx.beginPath(); ctx.arc(mean[0], mean[1], rms, 0, 2 * Math.PI); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 1.2 * px;
+        qs.forEach(function (q) { ctx.beginPath(); ctx.moveTo(mean[0], mean[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); });
+      }
+      ctx.lineWidth = dotR * 0.4;
+      for (var j = 2; j >= 0; j--) {
+        ctx.beginPath(); ctx.arc(qs[j][0], qs[j][1], dotR, 0, 2 * Math.PI);
+        ctx.fillStyle = KP; ctx.fill(); ctx.stroke();
+      }
+    }
+
+    var value = root.querySelector('.mv-gv-value'), states = root.querySelectorAll('.mv-gv-state span'), shownText = '', level = 0, drawn = -1;
+    function draw(l, force) {
+      level = l;
+      if (!force && l === drawn) return; // still frames of the loop cost nothing
+      drawn = ready === 3 ? l : -1;
+      var Ms = [], quads = [], qs = [];
+      for (var i = 0; i < 3; i++) {
+        var E = errorAt(i, l), M = compose(E, Ts[i]);
+        Ms.push(M);
+        quads.push(CORNERS.map(function (c) { return apply(M, c); }));
+        qs.push(apply(E, key));
+      }
+      var mean = [(qs[0][0] + qs[1][0] + qs[2][0]) / 3, (qs[0][1] + qs[1][1] + qs[2][1]) / 3];
+      var variance = qs.reduce(function (acc, q) { return acc + (q[0] - mean[0]) * (q[0] - mean[0]) + (q[1] - mean[1]) * (q[1] - mean[1]); }, 0) / 3;
+      var rms = Math.sqrt(variance), gv = 1000 / DIAG * rms;
+      render(pano, PB, Ms, quads, qs, mean, rms, true);
+      render(zoom, BOX, Ms, quads, qs, mean, rms, false);
+      var zero = gv < 0.05, text = 'GV = ' + (zero ? '0' : gv.toFixed(1));
+      if (text !== shownText) {
+        shownText = text;
+        value.textContent = text;
+        if (zero) value.classList.add('is-zero'); else value.classList.remove('is-zero');
+        states[0].className = zero ? 'is-on' : '';
+        states[1].className = zero ? '' : 'is-on';
+      }
+    }
+
+    // the loop: aligned, drift apart, misaligned, drift back (seconds)
+    var HOLD_A = 1.0, MOVE = 1.0, HOLD_B = 1.6, CYCLE = HOLD_A + MOVE + HOLD_B + MOVE;
+    function ease(p) { return p < 0.5 ? 2 * p * p : 1 - Math.pow(2 - 2 * p, 2) / 2; }
+    function levelAt(sec) {
+      var x = sec % CYCLE;
+      if (x < HOLD_A) return 0;
+      x -= HOLD_A;
+      if (x < MOVE) return ease(x / MOVE);
+      x -= MOVE;
+      if (x < HOLD_B) return 1;
+      return 1 - ease((x - HOLD_B) / MOVE);
+    }
+    var clock = 0, last = null, raf = null, visible = false;
+    function tick(now) {
+      if (last !== null) clock += Math.min(0.1, (now - last) / 1000);
+      last = now;
+      draw(levelAt(clock));
+      raf = window.requestAnimationFrame(tick);
+    }
+    function sync() {
+      var run = visible && !document.hidden && !(MOTION && MOTION.matches);
+      if (run && raf === null) { last = null; raf = window.requestAnimationFrame(tick); }
+      else if (!run && raf !== null) { window.cancelAnimationFrame(raf); raf = null; }
+    }
+    fit();
+    draw(MOTION && MOTION.matches ? 1 : 0); // a still image shows the misaligned case
+    window.addEventListener('resize', function () { fit(); draw(level, true); });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) { visible = entries[0].isIntersecting; sync(); }, { threshold: 0.2 }).observe(root);
+    }
+    document.addEventListener('visibilitychange', sync);
+  })();
+
+  /* ---------- Figure 3: Stage 2, the appearance-loss term of one pair at a time ---------- */
+  (function () {
+    var root = document.getElementById('mv-stage2');
+    if (!root) return;
+    var T = 9;
+    var terms = [
+      { pair: 'mv', i: 1, j: 0, a: 0, b: 0, button: '2 &rarr; 1',
+        title: 'Multi-view term: video 2 &rarr; video 1, at time <var>t</var>',
+        target: '<var>t</var>, 1', mask: '<var>M</var><span class="mv-ss"><span><var>t</var></span><span>2&rarr;1</span></span>', source: '<var>t</var>, 2', warped: '<var>t</var>, 2&rarr;1' },
+      { pair: 'mv', i: 0, j: 1, a: 0, b: 0, button: '1 &rarr; 2',
+        title: 'Multi-view term: video 1 &rarr; video 2, at time <var>t</var>',
+        target: '<var>t</var>, 2', mask: '<var>M</var><span class="mv-ss"><span><var>t</var></span><span>1&rarr;2</span></span>', source: '<var>t</var>, 1', warped: '<var>t</var>, 1&rarr;2' },
+      { pair: 'mv', i: 0, j: 2, a: 1, b: 1, button: '1 &rarr; 3',
+        title: 'Multi-view term: video 1 &rarr; video 3, at time <var>t</var>+1',
+        target: '<var>t</var>+1, 3', mask: '<var>M</var><span class="mv-ss"><span><var>t</var>+1</span><span>1&rarr;3</span></span>', source: '<var>t</var>+1, 1', warped: '<var>t</var>+1, 1&rarr;3' },
+      { pair: 'tp', i: 1, j: 1, a: 0, b: 1, button: 'video 2, <var>t</var> &rarr; <var>t</var>+1',
+        title: 'Temporal term: video 2, from <var>t</var> to <var>t</var>+1',
+        target: '<var>t</var>+1, 2', mask: '<var>M</var><span class="mv-ss"><span><var>t</var>&rarr;<var>t</var>+1</span><span>2</span></span>', source: '<var>t</var>, 2', warped: '<var>t</var>&rarr;<var>t</var>+1, 2' },
+      { pair: 'tp', i: 2, j: 2, a: 1, b: 0, button: 'video 3, <var>t</var>+1 &rarr; <var>t</var>',
+        title: 'Temporal term: video 3, from <var>t</var>+1 to <var>t</var>',
+        target: '<var>t</var>, 3', mask: '<var>M</var><span class="mv-ss"><span><var>t</var>+1&rarr;<var>t</var></span><span>3</span></span>', source: '<var>t</var>+1, 3', warped: '<var>t</var>+1&rarr;<var>t</var>, 3' }
+    ];
+    // labels in the paper's notation: target I_j, source I_i, and the source warped by the composition (H_j)^-1 H_i
+    function tStr(r) { return r ? '<var>t</var>+1' : '<var>t</var>'; }
+    // a superscript stacked over a subscript, as in the paper
+    function ss(sup, sub) { return '<span class="mv-ss"><span>' + sup + '</span><span>' + sub + '</span></span>'; }
+    function symb(letter, v, r) { return '<var' + (letter === 'H' ? ' class="bm"' : '') + '>' + letter + '</var>' + ss(tStr(r), String(v + 1)); }
+    terms.forEach(function (term) {
+      // picker labels: multi-view "t, 2 → 1" (time, then views); temporal "2, t → t+1" (view, then times)
+      term.button = term.pair === 'mv' ? tStr(term.a) + ', ' + (term.i + 1) + ' &rarr; ' + (term.j + 1)
+                                       : (term.i + 1) + ', ' + tStr(term.a) + ' &rarr; ' + tStr(term.b);
+      term.mask = '<var>M</var>' + (term.pair === 'mv' ? ss(tStr(term.a), (term.i + 1) + '&rarr;' + (term.j + 1))
+                                                     : ss(tStr(term.a) + '&rarr;' + tStr(term.b), String(term.i + 1)));
+      term.target = symb('I', term.j, term.b);
+      term.source = symb('I', term.i, term.a);
+      // two unbreakable halves, so a narrow screen wraps only between the transformation and the image
+      term.warped = '<span class="mv-nw">((' + symb('H', term.j, term.b) + ')<sup>&minus;1</sup>' + symb('H', term.i, term.a) + ')</span>' +
+        '<span class="mv-nw">(' + symb('I', term.i, term.a) + ')</span>';
+    });
+    function colorOf(term) { return term.pair === 'mv' ? MV_COLOR : TP_COLOR; }
+
+    // the window: thumbnails at (gx, gy) and one arrow per term, drawn from target to source; sel highlights one term
+    var windowBox = root.querySelector('.mv-window-svg');
+    function gx(c) { return c * 196; }
+    function gy(r) { return 30 + r * 140; }
+    function marker(id, color) {
+      return '<marker id="' + id + '" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto">' +
+        '<path d="M0 1L10 5L0 9L2.5 5z" fill="' + color + '"/></marker>';
+    }
+    function arrowPath(term) {
+      if (term.pair === 'mv') {
+        // the two directions of one pair mirror each other: one arc above the row, the other below it,
+        // between the same two points (the frames' facing halves); pairs at t+1 arc below the bottom row
+        var l = Math.min(term.i, term.j), r = Math.max(term.i, term.j);
+        var lx = gx(l) + 112, rx = gx(r) + 56;
+        var sx = term.i === l ? rx : lx, ex = term.i === l ? lx : rx;
+        var down = term.a === 1 || term.i > term.j, dir = down ? 1 : -1;
+        var y = term.a === 1 ? gy(1) + 99 : (down ? gy(0) + 99 : gy(0) - 3);
+        // a round arch: half an ellipse, so it leaves and enters the frames straight up/down (the arrowhead sits square)
+        var ry = term.a === 1 ? 34 : 24, rxE = Math.abs(ex - sx) / 2, sweep = ((ex > sx) === (dir < 0)) ? 1 : 0;
+        return 'M' + sx + ' ' + y + ' A' + rxE + ' ' + ry + ' 0 0 ' + sweep + ' ' + ex + ' ' + y;
+      }
+      // temporal: a straight drop between the two rows
+      var x = gx(term.i) + 84, y0 = term.a === 0 ? gy(0) + 99 : gy(1) - 3, y1 = term.a === 0 ? gy(1) - 3 : gy(0) + 99;
+      return 'M' + x + ' ' + y1 + ' L' + x + ' ' + y0;
+    }
+    function drawWindow(sel) {
+      var s = '', hits = '';
+      for (var r = 0; r < 2; r++) {
+        for (var c = 0; c < 3; c++) s += '<g transform="translate(' + gx(c) + ',' + gy(r) + ')">' + frame(CAMS[c][T + r], TINT[c], T + r) + '</g>';
+      }
+      terms.forEach(function (term, k) {
+        var d = arrowPath(term);
+        s += '<path d="' + d + '" fill="none" stroke="' + colorOf(term) + '" stroke-width="' + (k === sel ? 3 : 2) + '" stroke-linecap="round" opacity="' +
+          (sel < 0 || k === sel ? 1 : 0.25) + '" marker-end="url(#mv-arrow-' + term.pair + ')"/>';
+        if (k === sel) {
+          [[term.i, term.a], [term.j, term.b]].forEach(function (cr) {
+            s += '<rect x="' + (gx(cr[0]) - 4) + '" y="' + (gy(cr[1]) - 4) + '" width="176" height="104" rx="4" fill="none" stroke="' + colorOf(term) + '" stroke-width="4"/>';
+          });
+        }
+        // a wide, invisible stroke so the arrow is easy to click
+        hits += '<path d="' + d + '" fill="none" stroke="transparent" stroke-width="24" pointer-events="stroke" data-k="' + k + '"><title>' +
+          term.title.replace(/<[^>]+>/g, '') + '</title></path>';
+      });
+      windowBox.innerHTML = '<svg class="mv-img" viewBox="-8 0 576 316"><defs>' +
+        marker('mv-arrow-mv', MV_COLOR) + marker('mv-arrow-tp', TP_COLOR) + '</defs>' + s + hits + '</svg>';
+    }
+
+    // the picker: Auto, then one button per pair
+    var picker = root.querySelector('.mv-s2-picker');
+    function swatch(color) { return '<span class="mv-swatch" style="background:' + color + '"></span>'; }
+    function pairButtons(kind) {
+      return terms.map(function (term, k) {
+        return term.pair !== kind ? '' :
+          '<button type="button" data-pick="' + k + '" aria-pressed="false" style="--term:' + colorOf(term) + '">' + term.button + '</button>';
+      }).join('');
+    }
+    // one line on wide screens (the two groups sit side by side), two rows on phones
+    picker.innerHTML =
+      '<div class="mv-pick-row mv-pick-mv"><span class="mv-pick-label">' + swatch(MV_COLOR) + 'Multi-view</span>' + pairButtons('mv') + '</div>' +
+      '<div class="mv-pick-row mv-pick-tp"><span class="mv-pick-label">' + swatch(TP_COLOR) + 'Temporal</span>' + pairButtons('tp') + '</div>';
+    // Auto comes first, before "Pick a pair:"
+    var bar = root.querySelector('.mv-pick-bar');
+    var autoBtn = document.createElement('button');
+    autoBtn.type = 'button'; autoBtn.className = 'mv-auto'; autoBtn.setAttribute('data-pick', '-1'); autoBtn.setAttribute('aria-pressed', 'true'); autoBtn.textContent = 'Auto';
+    bar.insertBefore(autoBtn, bar.firstChild);
+    // Freeze: stop the animation and show the pair's three ingredients at once
+    var freezeBtn = document.createElement('button');
+    freezeBtn.type = 'button'; freezeBtn.className = 'mv-auto mv-freeze'; freezeBtn.setAttribute('aria-pressed', 'false'); freezeBtn.textContent = 'Freeze';
+    freezeBtn.title = 'Show the target frame, the overlap mask and the warped frame, before the multiplication';
+    bar.insertBefore(freezeBtn, autoBtn.nextSibling);
+    var buttons = Array.prototype.slice.call(bar.querySelectorAll('button[data-pick]'));
+
+    // a landmark both frames of a term see (the white house's roof peak if possible); guides mark it in the target view
+    var LANDMARKS = [[460, 160], [610, 192], [360, 170], [700, 166], [260, 190]];
+    function landmarkOf(term) {
+      var tgt = CAMS[term.j][T + term.b], src = CAMS[term.i][T + term.a];
+      function inside(q) { return q[0] > 14 && q[0] < W - 14 && q[1] > 14 && q[1] < H - 14; }
+      for (var n = 0; n < LANDMARKS.length; n++) {
+        var q = apply(tgt, LANDMARKS[n]);
+        if (inside(q) && inside(apply(src, LANDMARKS[n]))) return q;
+      }
+      var c = apply(compose(tgt, invert(src)), [W / 2, H / 2]); // otherwise the center of the overlap
+      return [Math.max(14, Math.min(W - 14, c[0])), Math.max(14, Math.min(H - 14, c[1]))];
+    }
+    function guides(q) {
+      function lines(stroke, width, dash) {
+        return '<line x1="0" y1="' + f2(q[1]) + '" x2="168" y2="' + f2(q[1]) + '" stroke="' + stroke + '" stroke-width="' + width + '"' + dash + '/>' +
+          '<line x1="' + f2(q[0]) + '" y1="0" x2="' + f2(q[0]) + '" y2="96" stroke="' + stroke + '" stroke-width="' + width + '"' + dash + '/>';
+      }
+      return '<g class="mv-guides">' + lines('rgba(0,0,0,0.35)', 2, '') + lines('#ffffff', 1, ' stroke-dasharray="4 3"') +
+        '<circle cx="' + f2(q[0]) + '" cy="' + f2(q[1]) + '" r="5" fill="none" stroke="#ffffff" stroke-width="1.4"/></g>';
+    }
+
+    // one row per term, images on one line and labels below: target * mask - warped source; parts start hidden
+    function termRow(term, k) {
+      var black = rect(FRAME_BOX, '#000'), target = frame(CAMS[term.j][T + term.b], TINT[term.j], T + term.b), mark = guides(landmarkOf(term));
+      return '<div class="mv-term" hidden style="--term:' + colorOf(term) + '">' +
+        '<div class="mv-term-title">' + swatch(colorOf(term)) + term.title + '</div>' +
+        '<div class="mv-term-grid">' +
+        '<div class="mv-anim" data-part="target">' + frameSvg(target) + '</div>' +
+        '<span class="mv-op mv-anim" data-part="times">&lowast;</span>' +
+        '<div class="mv-anim" data-part="mask">' + frameSvg(black + '<g clip-path="url(#mv-clip)"><polygon class="mv-mask-shape" points="0,0" fill="#fff"/>' +
+          '<g class="mv-product"><defs><clipPath id="mv-mc' + k + '"><polygon class="mv-mask-clip" points="0,0"/></clipPath></defs>' +
+          '<g clip-path="url(#mv-mc' + k + ')">' + target + '</g></g>' + mark + '</g>') + '</div>' +
+        '<span class="mv-op mv-anim" data-part="minus">&minus;</span>' +
+        '<div class="mv-anim" data-part="warped">' + frameSvg('<defs><clipPath id="mv-wc' + k + '"><polygon class="mv-warp-clip" points="0,0"/></clipPath></defs>' + black +
+          '<g clip-path="url(#mv-clip)"><g clip-path="url(#mv-wc' + k + ')"><g class="mv-warp-content">' + world(T + term.a) + '</g>' +
+          (TINT[term.i] ? rect(FRAME_BOX, TINT[term.i]) : '') + '</g>' +
+          '<polygon class="mv-warp-outline" points="0,0" fill="none" stroke="' + colorOf(term) + '" stroke-width="2.5" stroke-dasharray="7 5"/>' + mark + '</g>') + '</div>' +
+        '<span class="mv-label mv-anim" data-part="target">' + term.target + '</span><span></span>' +
+        '<span class="mv-label mv-anim mv-mask-label" data-part="mask">' + term.mask + '</span><span></span>' +
+        '<span class="mv-label mv-anim mv-warp-label" data-part="warped">' + term.source + '</span>' +
+        '</div></div>';
+    }
+    var holder = root.querySelector('.mv-s2-term');
+    holder.innerHTML = terms.map(termRow).join('');
+
+    var rows = Array.prototype.slice.call(holder.querySelectorAll('.mv-term')).map(function (el, k) {
+      var term = terms[k], rand = rng(53 * T + 11 * k + 3), parts = {};
+      Array.prototype.slice.call(el.querySelectorAll('.mv-anim')).forEach(function (p) {
+        var key = p.getAttribute('data-part');
+        (parts[key] = parts[key] || []).push(p);
+      });
+      return {
+        term: term,
+        el: el,
+        parts: parts,
+        source: CAMS[term.i][T + term.a],
+        rel: compose(CAMS[term.j][T + term.b], invert(CAMS[term.i][T + term.a])),
+        noise: CORNERS.map(function () { return [rand() * 1.4, rand() * 1.4]; }), // the ORT's error
+        maskShape: el.querySelector('.mv-mask-shape'),
+        maskClip: el.querySelector('.mv-mask-clip'),
+        product: el.querySelector('.mv-product'),
+        maskLabel: el.querySelector('.mv-mask-label'),
+        guides: Array.prototype.slice.call(el.querySelectorAll('.mv-guides')),
+        warpClip: el.querySelector('.mv-warp-clip'),
+        warpContent: el.querySelector('.mv-warp-content'),
+        warpOutline: el.querySelector('.mv-warp-outline'),
+        warpLabel: el.querySelector('.mv-warp-label')
+      };
+    });
+
+    function each(list, fn) { list.forEach(fn); }
+    // the mask: an all-ones frame warped by the ORT (l = 0: unwarped, l = 1: warped)
+    function setMask(row, l) {
+      var M = partial(row.rel, l);
+      var pts = CORNERS.map(function (c, n) {
+        var q = apply(M, c);
+        return f2(q[0] + l * row.noise[n][0]) + ',' + f2(q[1] + l * row.noise[n][1]);
+      }).join(' ');
+      row.maskShape.setAttribute('points', pts);
+      row.maskClip.setAttribute('points', pts);
+    }
+    // the multiplication: the target appears inside the mask, and the factors step back
+    function setProduct(row, on) {
+      row.product.style.opacity = on ? 1 : 0;
+      row.maskLabel.innerHTML = on ? row.term.target + ' &lowast; ' + row.term.mask : row.term.mask;
+      each(row.parts.target.concat(row.parts.times), function (el) {
+        if (on) el.classList.add('is-used'); else el.classList.remove('is-used');
+      });
+    }
+    function setGuides(row, n, on) { // n: 0 on the masked target, 1 on the warped source
+      if (on) row.guides[n].classList.add('is-on'); else row.guides[n].classList.remove('is-on');
+    }
+    // the source frame moving into the target view by the predicted relative transformation
+    function setWarp(row, l) {
+      var M = partial(row.rel, l), pts = polygon(M);
+      row.warpClip.setAttribute('points', pts);
+      row.warpOutline.setAttribute('points', pts);
+      row.warpContent.setAttribute('transform', matrixAttr(compose(M, row.source)));
+    }
+    function setRow(row, done) {
+      Object.keys(row.parts).forEach(function (key) {
+        each(row.parts[key], function (el) { if (done) el.classList.add('is-on'); else el.classList.remove('is-on'); });
+      });
+      setMask(row, done ? 1 : 0);
+      setWarp(row, done ? 1 : 0);
+      row.warpOutline.style.opacity = done ? 0 : 1;
+      row.warpLabel.innerHTML = done ? row.term.warped : row.term.source;
+      setProduct(row, done);
+      setGuides(row, 0, done);
+      setGuides(row, 1, done);
+      row.el.classList.remove('is-match');
+    }
+    // frozen: the target frame, the warped mask and the warped source side by side, before the multiplication
+    function setFrozenRow(row) {
+      setRow(row, true);
+      setProduct(row, false);
+      setGuides(row, 0, false);
+      setGuides(row, 1, false);
+    }
+
+    // a small timeline; bumping `run` cancels everything still pending
+    var run = 0;
+    function later(ms, fn) { var id = run; window.setTimeout(function () { if (id === run) fn(); }, ms); }
+    function wait(ms) { return function (next) { later(ms, next); }; }
+    function act(fn) { return function (next) { fn(); next(); }; }
+    function animate(ms, fn) {
+      return function (next) {
+        var id = run, start = null;
+        function tick(now) {
+          if (id !== run) return;
+          if (start === null) start = now;
+          var p = Math.min(1, (now - start) / ms);
+          fn(p < 0.5 ? 2 * p * p : 1 - Math.pow(2 - 2 * p, 2) / 2); // ease in and out
+          if (p < 1) window.requestAnimationFrame(tick); else next();
+        }
+        window.requestAnimationFrame(tick);
+      };
+    }
+    function chain(steps, i) {
+      i = i || 0;
+      if (i < steps.length) steps[i](function () { chain(steps, i + 1); });
+    }
+    function show(list) { return act(function () { each(list, function (el) { el.classList.add('is-on'); }); }); }
+
+    // build one term from scratch, then call done
+    var SLOW = 1.7;   // stretches the whole term animation
+    function build(k, done) {
+      var row = rows[k];
+      setRow(row, false);
+      chain([
+        wait(SLOW * 300),
+        show(row.parts.target), wait(SLOW * 550),
+        show(row.parts.times), wait(SLOW * 350),
+        show(row.parts.mask), wait(SLOW * 450),
+        animate(SLOW * 900, function (l) { setMask(row, l); }), wait(SLOW * 400),
+        act(function () { setProduct(row, true); }), wait(SLOW * 1000),
+        act(function () { setGuides(row, 0, true); }), wait(SLOW * 500),
+        show(row.parts.minus), wait(SLOW * 350),
+        show(row.parts.warped), act(function () { setGuides(row, 1, true); }), wait(SLOW * 700),
+        animate(SLOW * 1600, function (l) { setWarp(row, l); }),
+        act(function () { row.warpLabel.innerHTML = row.term.warped; row.warpOutline.style.opacity = 0; row.el.classList.add('is-match'); }), wait(SLOW * 1400),
+        act(function () { row.el.classList.remove('is-match'); }),
+        act(done)
+      ]);
+    }
+
+    // what is shown: the picked pair, or with nothing picked (Auto) every pair in turn
+    var picked = -1, current = 0, playedPick = false, visible = false, wasLive = null, frozen = false;
+    var motion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    function live() { return visible && !document.hidden && !(motion && motion.matches); }
+    function display(k) {
+      current = k;
+      rows.forEach(function (row, n) { row.el.hidden = n !== k; });
+      drawWindow(k);
+      buttons.forEach(function (b) {
+        var n = +b.getAttribute('data-pick');
+        b.setAttribute('aria-pressed', n === picked && !(frozen && n === -1) ? 'true' : 'false');   // Auto looks off while frozen
+        if (picked === -1 && n === k) b.classList.add('is-current'); else b.classList.remove('is-current');
+      });
+    }
+    function autoFrom(k) {
+      display(k);
+      build(k, function () { later(SLOW * 1600, function () { autoFrom((k + 1) % rows.length); }); });
+    }
+    function refresh() {
+      run++;
+      wasLive = live();
+      if (frozen) { var f = picked === -1 ? current : picked; display(f); setFrozenRow(rows[f]); return; }
+      if (picked === -1) {
+        display(current);
+        if (wasLive) autoFrom(current); else setRow(rows[current], true);
+      } else {
+        display(picked);
+        if (wasLive && !playedPick) { playedPick = true; build(picked, function () {}); } else setRow(rows[picked], true);
+      }
+    }
+    function pick(k) {
+      if (k === -1 && frozen) { frozen = false; freezeBtn.setAttribute('aria-pressed', 'false'); } // Auto always plays again, even from Freeze
+      picked = (k === picked) ? -1 : k; // picking the shown pair again returns to Auto
+      playedPick = false;
+      if (picked !== -1) current = picked;
+      refresh();
+    }
+    buttons.forEach(function (b) { b.addEventListener('click', function () { pick(+b.getAttribute('data-pick')); }); });
+    freezeBtn.addEventListener('click', function () {
+      frozen = !frozen;
+      freezeBtn.setAttribute('aria-pressed', frozen ? 'true' : 'false');
+      playedPick = false;
+      refresh();
+    });
+    windowBox.addEventListener('click', function (e) {
+      var t = e.target;
+      while (t && t !== windowBox && !(t.getAttribute && t.getAttribute('data-k'))) t = t.parentNode;
+      if (t && t !== windowBox) pick(+t.getAttribute('data-k'));
+    });
+
+    function sync() { if (live() !== wasLive) refresh(); }
+    refresh();
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries) { visible = entries[0].isIntersecting; sync(); }, { threshold: 0.25 }).observe(root);
+    }
+    document.addEventListener('visibilitychange', sync);
+  })();
+})();
+</script>
+<script>
+/* SVG math labels: stack a superscript directly over the subscript that follows it (or the reverse), as LaTeX does.
+   SVG lays tspans out one after another, so the second script is pulled back by the width of the first. */
+(function () {
+  'use strict';
+  function stack(root) {
+    var texts = root.querySelectorAll('svg text');
+    for (var k = 0; k < texts.length; k++) {
+      var ts = texts[k].querySelectorAll('tspan');
+      for (var i = 1; i < ts.length; i++) {
+        var a = ts[i - 1], b = ts[i];
+        if (b.getAttribute('data-stacked')) continue;
+        var da = parseFloat(a.getAttribute('dy')), db = parseFloat(b.getAttribute('dy'));
+        if (!a.hasAttribute('font-size') || !b.hasAttribute('font-size') || !da || !db || da * db > 0) continue;
+        var w = 0;
+        try { w = a.getComputedTextLength(); } catch (e) {}
+        if (!w) continue;   // not laid out yet; try again on the next pass
+        b.setAttribute('dx', String(-w + (parseFloat(b.getAttribute('dx')) || 0)));
+        b.setAttribute('data-stacked', '1');
+      }
+    }
+  }
+  function run() { var f = document.querySelectorAll('.mv-fig'); for (var i = 0; i < f.length; i++) stack(f[i]); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(run); else window.setTimeout(run, 300);
+  // labels inside a folded "Read more" have no size until it opens: lay them out then, and let figures refit
+  document.addEventListener('toggle', function (e) {
+    if (!e.target.open) return;
+    window.requestAnimationFrame(function () { run(); try { window.dispatchEvent(new Event('resize')); } catch (err) {} });
+  }, true);
+  window.setTimeout(run, 1500);
+  if ('MutationObserver' in window) {
+    var queued = false;
+    new MutationObserver(function () {
+      if (queued) return;
+      queued = true;
+      window.requestAnimationFrame(function () { queued = false; run(); });
+    }).observe(document.querySelector('main') || document.body, { childList: true, subtree: true });
+  }
+})();
+</script>
+</body>
+</html>
