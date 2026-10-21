@@ -1106,6 +1106,22 @@
   }
   .table-wrap { max-width: calc(var(--wide) + 44px); padding: 10px 16px; }
   table.results .group td { color: var(--red); font-weight: 700; }   /* the method-family rows of the results table */
+  /* computers: the whole benchmark table fits, no horizontal scroller */
+  @media (min-width: 900px) {
+    .table-wrap { overflow-x: visible; }
+    table.results { width: 100%; }
+    table.results th, table.results td { padding-left: 5px; padding-right: 5px; }
+    table.results .g { padding-left: 14px; }
+  }
+  /* phones: a visible scroll bar under the benchmark table, so readers see it scrolls sideways */
+  .table-scroll { display: none; }
+  @media (max-width: 899px) {
+    .table-scroll { display: block; max-width: var(--wide); margin: 10px auto 0; }
+    .table-scroll-track { position: relative; height: 8px; border: 1.5px solid var(--ink); background: #FFFDF7; }
+    .table-scroll-thumb { position: absolute; top: 0; bottom: 0; left: 0; width: 30%; background: var(--red); touch-action: none; }
+    .table-scroll-hint { margin-top: 5px; color: var(--muted); font-size: 0.82rem; text-align: right; }
+  }
+  @media (min-width: 900px) and (max-width: 1060px) { table.results th, table.results td { font-size: 0.76rem; } }
   .bibtex pre { padding: 6px 4px; }
   .mv-panel { border-radius: 0; }
   .ov-card { border: 2px solid var(--ink); border-radius: 0; background: #FFFDF7; }
@@ -1211,22 +1227,29 @@
   .tagline .tag-line { display: block; white-space: nowrap; }   /* the tagline always on two lines */
   /* the intro fills the screen, also as Safari's bars grow and shrink */
   .hero { min-height: 100vh; min-height: 100svh; }
-  @supports (height: 100dvh) { .hero { min-height: 100dvh; } }
+  @supports (height: 100lvh) { .hero { min-height: 100lvh; } }   /* the full screen, as if Safari's bars were hidden, so the intro always reaches the bottom */
   /* carousel arrows on phones and tablets: small, beside the video, never over it (computers unchanged) */
   @media (max-width: 899px) {
-    .gallery:not(.is-single) .gallery-stage { padding: 0 26px; }
-    .nav-btn { width: 20px; height: 34px; margin-top: -17px; background: var(--yellow); color: var(--ink); box-shadow: 2px 2px 0 var(--ink); border-width: 1.5px; }
+    .nav-btn { width: 24px; height: 34px; margin-top: -17px; background: var(--yellow); color: var(--ink); box-shadow: 2px 2px 0 var(--ink); border-width: 1.5px; opacity: 0.92; }
     .nav-btn:hover { background: var(--yellow); }
     .nav-btn svg { width: 12px; height: 12px; }
-    .nav-btn.prev { left: 0; }
-    .nav-btn.next { right: 0; }
+    .nav-btn.prev { left: 6px; }   /* inside the video, at its edges */
+    .nav-btn.next { right: 6px; }
+    /* videos as wide as the screen */
+    .gallery { width: 100vw; max-width: 100vw; margin-left: calc(50% - 50vw); margin-right: 0; }
+    .gallery-viewport { border-left-width: 0; border-right-width: 0; box-shadow: none; }
+    .band-green .gallery-viewport { box-shadow: none; }
+    /* no text over the videos */
+    .slide-label { display: none; }
   }
   /* phones and tablets */
   @media (max-width: 760px) {
     .hero { padding: 92px 16px 96px; }
     .hero-inner { width: 100%; margin-top: 4vh; }
-    .hero h1 { font-size: 7.2vw; line-height: 1.12; margin-bottom: 1.8rem; letter-spacing: -0.02em; }
-    .hero .tagline { max-width: none; font-size: min(1.05rem, 4.15vw); padding: 0; }
+    .hero h1 { font-size: 8.3vw; font-stretch: 86%; line-height: 1.1; margin-bottom: 1.8rem; letter-spacing: -0.015em; }
+    .venue { top: 13vh; }
+    .hero .tagline { max-width: 19.5rem; margin-left: auto; margin-right: auto; font-size: 1.05rem; padding: 0; text-wrap: balance; }
+    .tagline .tag-line { display: inline; white-space: normal; }   /* phones: the tagline wraps on three lines */
     .bench-caption { display: none; }
     :root { --hero-shade-mid: rgba(0, 0, 0, 0.16); --hero-shade-edge: rgba(0, 0, 0, 0.38); }
   }
@@ -1685,6 +1708,7 @@
         </tbody>
       </table>
     </div>
+    <div class="table-scroll" aria-hidden="true"><div class="table-scroll-track"><div class="table-scroll-thumb"></div></div><div class="table-scroll-hint">Swipe the table to see more &rarr;</div></div>
     <p class="caption bench-caption">
       The multi-camera benchmark on MMCD; <var>N</var> is the number of videos per scene. Stab. (&uarr;),
       GV (&darr;) and CMSA (&darr;) are averaged over the scenes on which each method succeeded without collapsing,
@@ -2125,6 +2149,31 @@
       });
     });
   }
+
+  // phones: the bar under the benchmark table follows (and drives) its sideways scroll
+  (function () {
+    var bar = document.querySelector('.table-scroll'), wrap = bar ? bar.previousElementSibling : null;
+    if (!bar || !wrap) return;
+    var track = bar.querySelector('.table-scroll-track'), thumb = bar.querySelector('.table-scroll-thumb');
+    function update() {
+      var max = wrap.scrollWidth - wrap.clientWidth;
+      if (max <= 1) { bar.style.visibility = 'hidden'; return; }
+      bar.style.visibility = '';
+      var frac = wrap.clientWidth / wrap.scrollWidth, tw = track.clientWidth;
+      thumb.style.width = (frac * 100) + '%';
+      thumb.style.left = ((wrap.scrollLeft / max) * (1 - frac) * tw) + 'px';
+    }
+    wrap.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    var dragX = null, startLeft = 0;
+    thumb.addEventListener('pointerdown', function (e) { dragX = e.clientX; startLeft = wrap.scrollLeft; thumb.setPointerCapture(e.pointerId); });
+    thumb.addEventListener('pointermove', function (e) {
+      if (dragX === null) return;
+      wrap.scrollLeft = startLeft + (e.clientX - dragX) * (wrap.scrollWidth / track.clientWidth);
+    });
+    thumb.addEventListener('pointerup', function () { dragX = null; });
+    update();
+  })();
 
   // contributions: underline the key phrases one after another each time the list comes into view;
   // once it is fully out of view, the underlines reset so the next visit plays them again
