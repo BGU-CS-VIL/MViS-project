@@ -792,6 +792,7 @@
   .mv-pick-bar .mv-pick-row { justify-content: flex-start; }
   .mv-pick-bar .mv-auto:not(.mv-freeze) { grid-area: auto; }
   .mv-pick-bar .mv-freeze { grid-area: frz; }
+  .mv-prep-bar { display: flex; justify-content: flex-end; margin-top: 10px; }
   .mv-s2-picker button, .mv-pick-label { white-space: nowrap; }
   .mv-pick-title { color: var(--text); font-size: 0.95rem; font-weight: 600; white-space: nowrap; }
   .mv-controls-below { margin: 16px 0 0; }
@@ -1033,7 +1034,7 @@
   /* hero: the video, a white title, a red script venue */
   .hero h1 { color: #ffffff; font-family: var(--font-display); font-weight: 800; font-stretch: 100%; letter-spacing: -0.015em; line-height: 1.08; font-size: clamp(2rem, 4.8vw, 3.6rem); }
   .venue { top: 52px; color: var(--red); font-family: var(--font-script); font-size: clamp(1.7rem, 3.4vw, 2.4rem); font-weight: 400; letter-spacing: 0; transform: rotate(-4deg); text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55); }
-  .authors { color: #ffffff; font-family: var(--font-display); font-weight: 600; letter-spacing: 0; text-transform: none; font-size: clamp(1.05rem, 2vw, 1.3rem); }
+  .authors { color: #ffffff; font-family: var(--font-display); font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; font-size: clamp(0.95rem, 1.8vw, 1.15rem); }
   .hero-inner { margin-top: 9vh; }
   .hero h1 { margin-bottom: 2.6rem; }   /* more room between the title and the author names */   /* the title, names and tagline sit a little below the middle */
   .tagline { margin-top: 4.2rem; color: #ffffff; font-family: var(--font-sans); }
@@ -1042,7 +1043,7 @@
   /* hero: linked author names, the affiliation, and the paper / code / dataset buttons */
   .authors a { color: inherit; text-decoration: none; border-bottom: 2px solid transparent; transition: border-color 0.2s ease; }
   .authors a:hover, .authors a:focus-visible { border-bottom-color: var(--yellow); }
-  .affiliation { max-width: none; margin: 0.7rem auto 0; text-align: center; color: rgba(255, 255, 255, 0.9); font-family: var(--font-sans); font-size: clamp(0.95rem, 1.6vw, 1.1rem); font-weight: 500; letter-spacing: 0.01em; }
+  .affiliation { max-width: none; margin: 0.7rem auto 0; text-align: center; color: rgba(255, 255, 255, 0.9); font-family: var(--font-sans); font-size: clamp(0.85rem, 1.45vw, 1rem); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
   .hero-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 12px; max-width: var(--measure); margin: 0 auto 2.2rem; padding: 6px 0 0; font-family: var(--font-display); }
   .hero-link { color: var(--ink); font-weight: 800; font-size: 1.1rem; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; }
   a.hero-link[href] { color: var(--blue-deep); border-bottom: 2px solid var(--yellow); }
@@ -2927,10 +2928,25 @@
       later(10600, play);
     }
 
+    // Freeze: stop the build-up and show the whole figure (pair, matches, ORT and mask) still
+    var frozen = false;
+    var bar = document.createElement('div');
+    bar.className = 'mv-prep-bar';
+    var freezeBtn = document.createElement('button');
+    freezeBtn.type = 'button'; freezeBtn.className = 'mv-auto mv-freeze'; freezeBtn.setAttribute('aria-pressed', 'false'); freezeBtn.textContent = 'Freeze';
+    freezeBtn.title = 'Stop the animation and show every step at once';
+    bar.appendChild(freezeBtn);
+    root.appendChild(bar);
+    freezeBtn.addEventListener('click', function () {
+      frozen = !frozen;
+      freezeBtn.setAttribute('aria-pressed', frozen ? 'true' : 'false');
+      sync();
+    });
+
     // the whole figure by default; the build-up plays only while on screen, and not with reduced motion
     var playing = false, visible = false;
     function sync() {
-      var should = visible && !document.hidden && !(MOTION && MOTION.matches);
+      var should = visible && !document.hidden && !frozen && !(MOTION && MOTION.matches);
       if (should && !playing) { playing = true; run++; play(); }
       else if (!should && playing) { playing = false; run++; setAll(true); }
     }
