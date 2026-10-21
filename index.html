@@ -1205,6 +1205,38 @@
   @media (max-width: 370px) {
     .site-footer { padding-left: 8px; padding-right: 8px; font-size: 0.7rem; letter-spacing: 0; }   /* the narrowest phones: still one line */
   }
+  /* ================= Mobile and layout fixes ================= */
+  /* the title always on two lines */
+  .hero h1 .h1-line { display: block; white-space: nowrap; }
+  .tagline .tag-line { display: block; white-space: nowrap; }   /* the tagline always on two lines */
+  /* the intro fills the screen, also as Safari's bars grow and shrink */
+  .hero { min-height: 100vh; min-height: 100svh; }
+  @supports (height: 100dvh) { .hero { min-height: 100dvh; } }
+  /* carousel arrows on phones and tablets: small, beside the video, never over it (computers unchanged) */
+  @media (max-width: 899px) {
+    .gallery:not(.is-single) .gallery-stage { padding: 0 26px; }
+    .nav-btn { width: 20px; height: 34px; margin-top: -17px; background: var(--yellow); color: var(--ink); box-shadow: 2px 2px 0 var(--ink); border-width: 1.5px; }
+    .nav-btn:hover { background: var(--yellow); }
+    .nav-btn svg { width: 12px; height: 12px; }
+    .nav-btn.prev { left: 0; }
+    .nav-btn.next { right: 0; }
+  }
+  /* phones and tablets */
+  @media (max-width: 760px) {
+    .hero { padding: 92px 16px 96px; }
+    .hero-inner { width: 100%; margin-top: 4vh; }
+    .hero h1 { font-size: 7.2vw; line-height: 1.12; margin-bottom: 1.8rem; letter-spacing: -0.02em; }
+    .hero .tagline { max-width: none; font-size: min(1.05rem, 4.15vw); padding: 0; }
+    .bench-caption { display: none; }
+    :root { --hero-shade-mid: rgba(0, 0, 0, 0.16); --hero-shade-edge: rgba(0, 0, 0, 0.38); }
+  }
+  /* tall (portrait) screens: show the whole panorama across the width, with dark bands above and below */
+  @media (max-aspect-ratio: 4/5) {
+    .hero-video { top: 50%; left: 50%; width: 178vw; height: auto; max-width: none; object-fit: contain; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%); }
+  }
+  /* touch devices: no scroll snapping (it fights in-page links on iOS) */
+  @media (hover: none) and (pointer: coarse) { html { scroll-snap-type: none; } }
+
   /* ================= Math: the reading font, italic variables, as in the Stage 1 figure ================= */
   var, svg tspan[font-style="italic"] { font-family: var(--font-body); font-style: italic; font-weight: 400; }   /* math: the reading font, italic letters (as in the Stage 1 figure) */
   .m, main sub, main sup, .mv-ss, svg tspan[font-size], .ov-approx { font-family: var(--font-body); font-weight: 400; }
@@ -1235,7 +1267,7 @@
   <div class="hero-shade"></div>
   <p class="venue">NeurIPS 2026</p>
   <div class="hero-inner">
-    <h1>Video Stitching from Multiple Moving Cameras</h1>
+    <h1><span class="h1-line">Video Stitching from</span> <span class="h1-line">Multiple Moving Cameras</span></h1>
     <ul class="authors">
       <li><a href="https://shiraif.github.io/" target="_blank" rel="noopener">Shira Ifergane</a></li>
       <li><a href="https://royamoyal.github.io/" target="_blank" rel="noopener">Roy Amoyal</a></li>
@@ -1243,7 +1275,7 @@
       <li><a href="https://www.orenfreifeld.com/" target="_blank" rel="noopener">Oren Freifeld</a></li>
     </ul>
     <p class="affiliation">Ben-Gurion University of the Negev</p>
-    <p class="tagline">The first video stitching method capable of handling more than 2 freely moving cameras</p>
+    <p class="tagline"><span class="tag-line">The first video stitching method capable of</span> <span class="tag-line">handling more than 2 freely moving cameras</span></p>
   </div>
   <!-- the walkie-talkie clip is embedded, so the button works wherever the page is opened -->
   <a class="scroll-cue" href="#contributions" aria-label="Scroll to the contributions"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5l6 6 6-6"/></svg></a>
@@ -1653,7 +1685,7 @@
         </tbody>
       </table>
     </div>
-    <p class="caption">
+    <p class="caption bench-caption">
       The multi-camera benchmark on MMCD; <var>N</var> is the number of videos per scene. Stab. (&uarr;),
       GV (&darr;) and CMSA (&darr;) are averaged over the scenes on which each method succeeded without collapsing,
       counted in Succ.; the best values are in bold. StabStitch++&rsquo;s high GV on
@@ -2079,6 +2111,19 @@
     }, { passive: true });
     window.addEventListener('resize', updateBar);
     updateBar();
+
+    // in-page links (top bar, scroll arrow): scroll by script, so they also work on iOS Safari,
+    // and stop just below the top bar
+    toArray(document.querySelectorAll('.topbar a[href^="#"], a.scroll-cue')).forEach(function (a) {
+      a.addEventListener('click', function (e) {
+        var id = a.getAttribute('href').slice(1), el = document.getElementById(id);
+        if (!el) return;
+        e.preventDefault();
+        var y = id === 'top' ? 0 : el.getBoundingClientRect().top + window.pageYOffset - (topbar.offsetHeight + 16);
+        try { window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' }); } catch (err) { window.scrollTo(0, Math.max(0, y)); }
+        if (history.replaceState) history.replaceState(null, '', '#' + id);
+      });
+    });
   }
 
   // contributions: underline the key phrases one after another each time the list comes into view;
