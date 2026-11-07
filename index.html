@@ -1077,12 +1077,6 @@
   .authors a { color: inherit; text-decoration: none; border-bottom: 2px solid transparent; transition: border-color 0.2s ease; }
   .authors a:hover, .authors a:focus-visible { border-bottom-color: var(--yellow); }
   .affiliation { max-width: none; margin: 0.7rem auto 0; text-align: center; color: rgba(255, 255, 255, 0.9); font-family: var(--font-sans); font-size: clamp(0.85rem, 1.45vw, 1rem); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
-  .hero-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 12px; max-width: var(--measure); margin: 0 auto 2.2rem; padding: 6px 0 0; font-family: var(--font-display); }
-  .hero-link { color: var(--ink); font-weight: 800; font-size: 1.1rem; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; }
-  a.hero-link[href] { color: var(--blue-deep); border-bottom: 2px solid var(--yellow); }
-  a.hero-link[href]:hover { color: var(--red); }
-  .hero-sep { color: var(--ink); font-weight: 800; }
-  .hero-soon { flex-basis: 100%; margin-top: 4px; text-align: center; color: var(--red); font-family: var(--font-sans); font-size: 0.92rem; font-weight: 600; letter-spacing: 0.02em; }
   .hero .tagline { margin-top: 2.6rem; }
   @media (min-width: 1025px) and (hover: hover) { .hero .tagline { margin-top: 3.6rem; } }   /* computers only: the tagline a little lower */
 
@@ -1093,7 +1087,7 @@
   .topbar a.topbar-home, .topbar a.topbar-home b { color: var(--yellow); font-weight: 900; }
   .topbar a.topbar-home { font-size: 1.35rem; line-height: 1.1; letter-spacing: -0.01em; }   /* the MViS name, larger than the links */
   @media (max-width: 600px) { .topbar a.topbar-home { font-size: 1.25rem; } }
-  .topbar a.topbar-links a.nav-mmcd, .topbar .topbar-links a.nav-mmcd { color: #ffffff; }   /* MMCD in the panel: white */
+  .topbar .topbar-links a.nav-mmcd { color: var(--ink); }   /* MMCD in the panel: the same color as the other links */
   .topbar a.nav-mmcd, .rainbow, .band-green .rainbow {
     background: none; color: inherit; -webkit-text-fill-color: currentColor; -webkit-animation: none; animation: none;
   }
@@ -1309,6 +1303,31 @@
   .mv-s2-picker button var { font-family: inherit; font-weight: inherit; }   /* Pick a pair: plain button text, not the LaTeX face */
   .slide-label:has(var), th:has(> var), .mv-rows span { font-family: var(--font-body); font-weight: 400; }   /* labels that are only math, like "N = 4" */
   .mv-g6-label, .mv-g6-label var, .mv-g6-label .mv-ss, .mv-g6-label sup, .mv-g6-label sub { font-family: var(--font-body); font-weight: 400; }   /* Stage 1 pair formulas: plain reading font, as before the LaTeX face */
+
+  /* Paper, code and dataset links in the intro, under the tagline */
+  .intro-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 14px; margin: 2.4rem auto 0; text-shadow: none; }
+  .intro-link { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 800; font-size: 1rem; line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; white-space: nowrap; }
+  .intro-link svg { width: 18px; height: 18px; flex: none; }
+  .intro-link small { font-family: var(--font-sans); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .intro-sep { display: none; }
+  span.intro-link { cursor: default; }
+  a.intro-link:focus-visible { outline: 2px solid #ffffff; outline-offset: 3px; }
+  @media (max-width: 600px) {   /* phones: all three links on one row */
+    .intro-links { gap: 6px; margin-top: 1.6rem; }
+    .intro-link { gap: 6px; font-size: 0.8rem; letter-spacing: 0.04em; }
+    .intro-link svg { width: 15px; height: 15px; }
+    .intro-link small { font-size: 0.58rem; }
+  }
+  /* option G: smoky dark blocks with a red offset shadow, like the MMCD carousel */
+  .intro-link { padding: 11px 18px; border: 2px solid rgba(255, 255, 255, 0.7); background: rgba(30, 30, 30, 0.5); color: #ffffff; box-shadow: 4px 4px 0 rgba(221, 74, 72, 0.85); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease; }
+  a.intro-link:hover { background: var(--yellow); border-color: var(--ink); color: var(--ink); transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--red); }
+  @media (max-width: 600px) {   /* phones: smaller links, all three on one row */
+    .intro-links { flex-wrap: nowrap; gap: 7px; }
+    .intro-link { gap: 5px; padding: 7px 7px; font-size: 0.7rem; letter-spacing: 0.03em; box-shadow: 3px 3px 0 rgba(221, 74, 72, 0.85); }
+    .intro-link svg { width: 13px; height: 13px; }
+    .intro-link small { font-size: 0.52rem; letter-spacing: 0.02em; }
+  }
+  .intro-link.is-soon { opacity: 0.6; box-shadow: none; }
 </style>
 </head>
 <body>
@@ -1341,6 +1360,11 @@
     </ul>
     <p class="affiliation">Ben-Gurion University of the Negev</p>
     <p class="tagline"><span class="tag-line">The first video stitching method capable of</span> <span class="tag-line">handling more than 2 freely moving cameras</span></p>
+    <!-- Paper, code and dataset. When a link is ready, turn its <span class="intro-link is-soon"> into
+         <a class="intro-link" href="..." target="_blank" rel="noopener"> and delete its <small>Soon</small> -->
+    <nav class="intro-links" aria-label="Paper, code and dataset">
+      <span class="intro-link is-soon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.8423 0a1.0037 1.0037 0 0 0-.922.6078c-.1536.3687-.0438.6275.2938 1.1113l6.9185 8.3597-1.0223 1.1058a1.0393 1.0393 0 0 0 .003 1.4229l1.2292 1.3135-5.4391 6.4444c-.2803.299-.4538.823-.2971 1.1986a1.0253 1.0253 0 0 0 .9585.635.9133.9133 0 0 0 .6891-.3405l5.783-6.126 7.4902 8.0051a.8527.8527 0 0 0 .6835.2597.9575.9575 0 0 0 .8777-.6138c.1577-.377-.017-.7502-.306-1.1407l-7.0518-8.3418 1.0632-1.13a.9626.9626 0 0 0 .0089-1.3165L4.6336.4639s-.3733-.4535-.768-.463zm0 .272h.0166c.2179.0052.4874.2715.5644.3639l.005.006.0052.0055 10.169 10.9905a.6915.6915 0 0 1-.0072.945l-1.0666 1.133-1.4982-1.7724-8.5994-10.39c-.3286-.472-.352-.6183-.2592-.841a.7307.7307 0 0 1 .6704-.4401Zm14.341 1.5701a.877.877 0 0 0-.6554.2418l-5.6962 6.1584 1.6944 1.8319 5.3089-6.5138c.3251-.4335.479-.6603.3247-1.0292a1.1205 1.1205 0 0 0-.9763-.689zm-7.6557 12.2823 1.3186 1.4135-5.7864 6.1295a.6494.6494 0 0 1-.4959.26.7516.7516 0 0 1-.706-.4669c-.1119-.2682.0359-.6864.2442-.9083l.0051-.0055.0047-.0055z"/></svg>Paper <small>Soon</small></span><span class="intro-sep" aria-hidden="true">&middot;</span><a class="intro-link" href="https://github.com/BGU-CS-VIL/MViS" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>Code</a><span class="intro-sep" aria-hidden="true">&middot;</span><span class="intro-link is-soon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.025 1.13c-5.77 0-10.449 4.647-10.449 10.378 0 1.112.178 2.181.503 3.185.064-.222.203-.444.416-.577a.96.96 0 0 1 .524-.15c.293 0 .584.124.84.284.278.173.48.408.71.694.226.282.458.611.684.951v-.014c.017-.324.106-.622.264-.874s.403-.487.762-.543c.3-.047.596.06.787.203s.31.313.4.467c.15.257.212.468.233.542.01.026.653 1.552 1.657 2.54.616.605 1.01 1.223 1.082 1.912.055.537-.096 1.059-.38 1.572.637.121 1.294.187 1.967.187.657 0 1.298-.063 1.921-.178-.287-.517-.44-1.041-.384-1.581.07-.69.465-1.307 1.081-1.913 1.004-.987 1.647-2.513 1.657-2.539.021-.074.083-.285.233-.542.09-.154.208-.323.4-.467a1.08 1.08 0 0 1 .787-.203c.359.056.604.29.762.543s.247.55.265.874v.015c.225-.34.457-.67.683-.952.23-.286.432-.52.71-.694.257-.16.547-.284.84-.285a.97.97 0 0 1 .524.151c.228.143.373.388.43.625l.006.04a10.3 10.3 0 0 0 .534-3.273c0-5.731-4.678-10.378-10.449-10.378M8.327 6.583a1.5 1.5 0 0 1 .713.174 1.487 1.487 0 0 1 .617 2.013c-.183.343-.762-.214-1.102-.094-.38.134-.532.914-.917.71a1.487 1.487 0 0 1 .69-2.803m7.486 0a1.487 1.487 0 0 1 .689 2.803c-.385.204-.536-.576-.916-.71-.34-.12-.92.437-1.103.094a1.487 1.487 0 0 1 .617-2.013 1.5 1.5 0 0 1 .713-.174m-10.68 1.55a.96.96 0 1 1 0 1.921.96.96 0 0 1 0-1.92m13.838 0a.96.96 0 1 1 0 1.92.96.96 0 0 1 0-1.92M8.489 11.458c.588.01 1.965 1.157 3.572 1.164 1.607-.007 2.984-1.155 3.572-1.164.196-.003.305.12.305.454 0 .886-.424 2.328-1.563 3.202-.22-.756-1.396-1.366-1.63-1.32q-.011.001-.02.006l-.044.026-.01.008-.03.024q-.018.017-.035.036l-.032.04a1 1 0 0 0-.058.09l-.014.025q-.049.088-.11.19a1 1 0 0 1-.083.116 1.2 1.2 0 0 1-.173.18q-.035.029-.075.058a1.3 1.3 0 0 1-.251-.243 1 1 0 0 1-.076-.107c-.124-.193-.177-.363-.337-.444-.034-.016-.104-.008-.2.022q-.094.03-.216.087-.06.028-.125.063l-.13.074q-.067.04-.136.086a3 3 0 0 0-.135.096 3 3 0 0 0-.26.219 2 2 0 0 0-.12.121 2 2 0 0 0-.106.128l-.002.002a2 2 0 0 0-.09.132l-.001.001a1.2 1.2 0 0 0-.105.212q-.013.036-.024.073c-1.139-.875-1.563-2.317-1.563-3.203 0-.334.109-.457.305-.454m.836 10.354c.824-1.19.766-2.082-.365-3.194-1.13-1.112-1.789-2.738-1.789-2.738s-.246-.945-.806-.858-.97 1.499.202 2.362c1.173.864-.233 1.45-.685.64-.45-.812-1.683-2.896-2.322-3.295s-1.089-.175-.938.647 2.822 2.813 2.562 3.244-1.176-.506-1.176-.506-2.866-2.567-3.49-1.898.473 1.23 2.037 2.16c1.564.932 1.686 1.178 1.464 1.53s-3.675-2.511-4-1.297c-.323 1.214 3.524 1.567 3.287 2.405-.238.839-2.71-1.587-3.216-.642-.506.946 3.49 2.056 3.522 2.064 1.29.33 4.568 1.028 5.713-.624m5.349 0c-.824-1.19-.766-2.082.365-3.194 1.13-1.112 1.789-2.738 1.789-2.738s.246-.945.806-.858.97 1.499-.202 2.362c-1.173.864.233 1.45.685.64.451-.812 1.683-2.896 2.322-3.295s1.089-.175.938.647-2.822 2.813-2.562 3.244 1.176-.506 1.176-.506 2.866-2.567 3.49-1.898-.473 1.23-2.037 2.16c-1.564.932-1.686 1.178-1.464 1.53s3.675-2.511 4-1.297c.323 1.214-3.524 1.567-3.287 2.405.238.839 2.71-1.587 3.216-.642.506.946-3.49 2.056-3.522 2.064-1.29.33-4.568 1.028-5.713-.624"/></svg>Dataset <small>Soon</small></span>
+    </nav>
   </div>
   <!-- the walkie-talkie clip is embedded, so the button works wherever the page is opened -->
   <a class="scroll-cue" href="#contributions" aria-label="Scroll to the contributions"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5l6 6 6-6"/></svg></a>
@@ -1349,11 +1373,6 @@
 <main>
   <section class="band band-cream">
 
-    <!-- Paper, code and dataset: when a link is ready, add href="..." to its <a>; when all are ready, delete the "Coming soon" span -->
-    <nav class="hero-links" aria-label="Paper, code and dataset">
-      <a class="hero-link">Paper</a><span class="hero-sep" aria-hidden="true">&middot;</span><a class="hero-link">Code</a><span class="hero-sep" aria-hidden="true">&middot;</span><a class="hero-link">Dataset</a>
-      <span class="hero-soon">Coming soon</span>
-    </nav>
 
     <!-- ============ Contributions ============ -->
     <h2 id="contributions">Contributions</h2>
